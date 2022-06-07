@@ -11,6 +11,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     // bft_types/src/lib.rs?
     let prog = BFProgram::from_file(file_name)?;
     let vm: VM<usize> = VM::new(0, false);
+    // Print output
+    vm.interpret(&prog);
 
     Ok(())
 }

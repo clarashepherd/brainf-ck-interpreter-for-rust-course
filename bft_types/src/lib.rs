@@ -50,7 +50,7 @@ impl fmt::Display for RawInstruction {
 
 /// Representation of input instruction, inc. line and col numbers
 #[derive(Debug)]
-struct InputInstruction {
+pub struct InputInstruction {
     instruction: RawInstruction,
     line_num: u32,
     col_num: u32,
@@ -86,6 +86,11 @@ pub struct BFProgram<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> BFProgram<P> {
+    // Getter function for (private) instructions
+    pub fn instructions(&self) -> &Vec<InputInstruction> {
+        &self.instructions
+    }
+
     // AsRef: specifies that generic P is of any type which can be
     // implicitly converted into a ref to a path
     pub fn new(file_name: P, content: String) -> Self {
