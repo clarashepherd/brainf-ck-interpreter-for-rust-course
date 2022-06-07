@@ -1,6 +1,9 @@
+#![warn(missing_docs)]
+
+//! Main program
 use bft_interp::VM;
 use bft_types::BFProgram;
-use std::{env, error::Error};
+use std::env;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     // Nice syntax taken from Nathan's solution

@@ -1,22 +1,37 @@
+//! Useful types for BF interpreter.
+//!
+//!
+//! Contains a struct for a BF program, and methods to read instructions from a file.
+#![warn(missing_docs)]
+
 use std::fmt;
 use std::fs;
 use std::path::Path;
 
-/// Enum for raw instructions
+/// Enum for raw instructions, corresponding to the 8 input characters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RawInstruction {
+    /// Increment pointer
     PointerInc,
+    /// Decrement pointer
     PointerDec,
+    /// Increment data byte
     ByteInc,
+    /// Decrement data byte
     ByteDec,
+    /// Output data byte
     ByteOut,
+    /// Accept data byte
     ByteAccept,
+    /// If zero, jump forward
     JumpForward,
+    /// If zero, jump backward
     JumpBack,
 }
 
 impl RawInstruction {
-    /// Convert instruction character into raw instruction
+    /// Convert a char into a raw instruction.
+
     pub fn from_char(c: char) -> Option<RawInstruction> {
         match c {
             '>' => Some(Self::PointerInc),
@@ -33,7 +48,7 @@ impl RawInstruction {
 }
 
 impl fmt::Display for RawInstruction {
-    /// Derive Display for raw instruction, so can printf later
+    /// Print interpretation of instruction.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             RawInstruction::PointerDec => write!(f, "Decrement current location"),
@@ -43,12 +58,12 @@ impl fmt::Display for RawInstruction {
             RawInstruction::ByteAccept => write!(f, "Accept Data"),
             RawInstruction::ByteOut => write!(f, "Output Data"),
             RawInstruction::JumpForward => write!(f, "If zero jump forward to next ]"),
-            RawInstruction::JumpBack => write!(f, "If none zero jump back to previous ["),
+            RawInstruction::JumpBack => write!(f, "If non zero jump back to previous ["),
         }
     }
 }
 
-/// Representation of input instruction, inc. line and col numbers
+/// Represent an input instruction, inc. line and col numbers
 #[derive(Debug)]
 pub struct InputInstruction {
     instruction: RawInstruction,
@@ -57,7 +72,7 @@ pub struct InputInstruction {
 }
 
 impl InputInstruction {
-    /// new inp
+    /// Create a new input instruction
     pub fn new(instruction: RawInstruction, line_num: u32, col_num: u32) -> Self {
         Self {
             instruction,
@@ -67,8 +82,8 @@ impl InputInstruction {
     }
 }
 
-/// Derive display for input instruction
 impl fmt::Display for InputInstruction {
+    /// Display an input instruction in a helpful way.
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!(
             f,
@@ -79,6 +94,10 @@ impl fmt::Display for InputInstruction {
 }
 
 #[derive(Debug)]
+/// Represent a BF program: file name and its associated instructions.
+///
+// Accepts a generic type: anything which can be implicitly converted to
+// a reference to a path.
 pub struct BFProgram<P: AsRef<Path>> {
     // Why do I get a warning here?
     file_name: P,
@@ -86,13 +105,14 @@ pub struct BFProgram<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> BFProgram<P> {
-    // Getter function for (private) instructions
+    /// Getter function for (private) instructions
     pub fn instructions(&self) -> &Vec<InputInstruction> {
         &self.instructions
     }
 
     // AsRef: specifies that generic P is of any type which can be
     // implicitly converted into a ref to a path
+    /// Create a new BF program from a file name and its string-type content
     pub fn new(file_name: P, content: String) -> Self {
         let mut instructions = Vec::new();
         let mut line_count = 1;
@@ -115,6 +135,14 @@ impl<P: AsRef<Path>> BFProgram<P> {
         }
     }
 
+    /// Read from a file and create a new BF program from its content
+    /// # Examples
+    // Some code (run as user, need to include crates):
+    /// ```
+    ///
+    /// use bft_types::BFProgram;
+    /// let prog = BFProgram::from_file("example_commands");
+    /// ```
     pub fn from_file(file_name: P) -> Result<BFProgram<P>, Box<dyn std::error::Error>> {
         let f = file_name.as_ref();
         let content = fs::read_to_string(f)?;

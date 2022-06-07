@@ -1,13 +1,20 @@
+//! Contains structs and methods for BF interpreter.
+//! Currently just prints instructions.
+#![warn(missing_docs)]
+
 use bft_types::BFProgram;
 use std::path::Path;
 
+/// Represents virtual machine: tape with some number of cells, each of some type.
+/// Includes option to dynamically grow tape.
 pub struct VM<T> {
     num_cells: usize,
     tape: Vec<T>,
     can_grow: bool,
 }
-
 impl<T> VM<T> {
+    /// Create new VM with some size, can choose whether to grow.
+    /// If given size is zero, tape is 30,000 bytes long.
     pub fn new(size: usize, can_grow: bool) -> Self {
         let mut num_cells = 30000;
         if size != 0 {
@@ -21,6 +28,8 @@ impl<T> VM<T> {
         }
     }
 
+    /// Interpret the instructions at some given path.
+    /// Currently just prints their content.
     pub fn interpret<P: AsRef<Path>>(self, prog: &BFProgram<P>) {
         // "instructions" are private data, needed a getter method
         for i in prog.instructions() {
