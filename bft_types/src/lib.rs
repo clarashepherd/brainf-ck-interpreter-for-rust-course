@@ -4,9 +4,9 @@
 //! Contains a struct for a BF program, and methods to read instructions from a file.
 #![warn(missing_docs)]
 
-use std::fmt;
-use std::fs;
 use std::path::Path;
+use std::{cmp, fmt, fs};
+use thiserror::Error;
 
 /// Enum for raw instructions, corresponding to the 8 input characters.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -63,6 +63,16 @@ impl fmt::Display for RawInstruction {
     }
 }
 
+#[derive(Error, Debug, PartialEq)]
+/// Enum for program errors
+pub enum BFError {
+    #[error("Bracket not closed. Type is {}", bad_bracket)]
+    BracketError {
+        /// Bad bracket: "[" or "]"
+        bad_bracket: String,
+    },
+}
+
 /// Represent an input instruction, inc. line and col numbers
 #[derive(Debug)]
 pub struct InputInstruction {
@@ -110,6 +120,43 @@ impl<P: AsRef<Path>> BFProgram<P> {
         &self.instructions
     }
 
+    /// Check brackets balanced.
+    ///
+    /// Notes on generalisation:
+    /// This implementation is simple because there's only one bracket type.
+    /// If had multiple type, would make the following changes:
+    /// * Every open bracket would be pushed to a vector (stack).
+    /// * If encounter a closed bracket, try to pop back corresponding open bracket from stack.
+    /// If this operation fails, return an error.
+    /// * Before exiting function, check whether the stack is empty.
+    /// If it's not empty, return an error.
+    pub fn check_brackets_balanced(&self) -> Result<(), BFError> {
+        let mut num_open_brackets = 0;
+        for i in self.instructions() {
+            let raw = i.instruction;
+            match raw {
+                RawInstruction::JumpForward => num_open_brackets += 1,
+                RawInstruction::JumpBack => num_open_brackets -= 1,
+                _ => (),
+            }
+        }
+        // Check whether each open bracket is closed
+        match num_open_brackets.cmp(&0) {
+            cmp::Ordering::Greater => {
+                return Err(BFError::BracketError {
+                    bad_bracket: "[".to_string(),
+                });
+            }
+            cmp::Ordering::Less => {
+                return Err(BFError::BracketError {
+                    bad_bracket: "]".to_string(),
+                });
+            }
+            cmp::Ordering::Equal => {}
+        }
+        Ok(())
+    }
+
     // AsRef: specifies that generic P is of any type which can be
     // implicitly converted into a ref to a path
     /// Create a new BF program from a file name and its string-type content
@@ -146,12 +193,16 @@ impl<P: AsRef<Path>> BFProgram<P> {
     pub fn from_file(file_name: P) -> Result<BFProgram<P>, Box<dyn std::error::Error>> {
         let f = file_name.as_ref();
         let content = fs::read_to_string(f)?;
-        Ok(BFProgram::new(file_name, content))
+        let prog = BFProgram::new(file_name, content);
+        prog.check_brackets_balanced()?;
+        Ok(prog)
     }
 }
 
 #[cfg(test)]
 mod tests {
+    use crate::BFError;
+    //use crate::BFError;
     use crate::BFProgram;
     use crate::RawInstruction;
 
@@ -177,5 +228,31 @@ mod tests {
         let prog = BFProgram::new("EmptyFile", "".to_string());
         // Test first instruction
         assert_eq!(prog.instructions.len(), 0);
+    }
+
+    #[test]
+    /// Too many open brackets
+    fn bracket_error_open() {
+        let prog = BFProgram::new("TestFile", "[[[]".to_string());
+        let result = prog.check_brackets_balanced();
+        assert_eq!(
+            result,
+            Err(BFError::BracketError {
+                bad_bracket: "[".to_string(),
+            })
+        );
+    }
+
+    /// Too few open brackets
+    #[test]
+    fn bracket_error_closed() {
+        let prog = BFProgram::new("TestFile", "[]]".to_string());
+        let result = prog.check_brackets_balanced();
+        assert_eq!(
+            result,
+            Err(BFError::BracketError {
+                bad_bracket: "]".to_string(),
+            })
+        );
     }
 }

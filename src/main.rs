@@ -1,20 +1,31 @@
 #![warn(missing_docs)]
 
 //! Main program
+use std::process;
+
 use bft_interp::VM;
 use bft_types::BFProgram;
-use std::path::PathBuf;
 
 mod cli;
 use clap::Parser;
 use cli::Options;
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let opt = Options::parse();
-    let prog = BFProgram::from_file(opt.file_name)?;
+/// Run the interpreter, accepting CLI options
+fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
+    let prog = BFProgram::from_file(&opt.file_name)?;
     let vm: VM<usize> = VM::new(0, false);
-    // Print output
     vm.interpret(&prog);
 
     Ok(())
+}
+
+/// Main function.
+/// Parse the CLI argument and run interpreter
+
+fn main() {
+    let opt = Options::parse();
+    if let Err(e) = run_bft(&opt) {
+        eprintln!("Error in file {:?}: {}", opt.file_name, e);
+        process::exit(1);
+    }
 }
