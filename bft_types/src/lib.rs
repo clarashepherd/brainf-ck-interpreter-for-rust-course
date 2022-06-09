@@ -70,6 +70,8 @@ pub enum BFError {
     BracketError {
         /// Bad bracket: "[" or "]"
         bad_bracket: String,
+        bad_line: usize,
+        bad_col: usize,
     },
 }
 
@@ -77,13 +79,13 @@ pub enum BFError {
 #[derive(Debug)]
 pub struct InputInstruction {
     instruction: RawInstruction,
-    line_num: u32,
-    col_num: u32,
+    line_num: usize,
+    col_num: usize,
 }
 
 impl InputInstruction {
     /// Create a new input instruction
-    pub fn new(instruction: RawInstruction, line_num: u32, col_num: u32) -> Self {
+    pub fn new(instruction: RawInstruction, line_num: usize, col_num: usize) -> Self {
         Self {
             instruction,
             line_num,
@@ -122,44 +124,47 @@ impl<P: AsRef<Path>> BFProgram<P> {
 
     /// Check brackets balanced.
     ///
-    /// Notes on generalisation:
-    /// This implementation is simple because there's only one bracket type.
-    /// If had multiple type, would make the following changes:
-    /// * Every open bracket would be pushed to a vector (stack).
-    /// * If encounter a closed bracket, try to pop back corresponding open bracket from stack.
-    /// If this operation fails, return an error.
-    /// * Before exiting function, check whether the stack is empty.
-    /// If it's not empty, return an error.
+    /// This method would easily generalise to an arbitrary number of bracket types
     pub fn check_brackets_balanced(&self) -> Result<(), BFError> {
-        let mut num_open_brackets = 0;
+        let mut stack: Vec<RawInstruction> = Vec::new();
+        let mut line_last_open = 0;
+        let mut col_last_open = 0;
         for i in self.instructions() {
             let raw = i.instruction;
             match raw {
-                RawInstruction::JumpForward => num_open_brackets += 1,
-                RawInstruction::JumpBack => num_open_brackets -= 1,
-                _ => (),
+                RawInstruction::JumpForward => {
+                    // push raw instruction to vector
+                    // Save last line and col of stack's top
+                    stack.push(raw);
+                    line_last_open = i.line_num;
+                    col_last_open = i.col_num;
+                }
+                RawInstruction::JumpBack => {
+                    // attempt to pop back
+                    // if fail, return an error
+                    stack.pop().ok_or(BFError::BracketError {
+                        bad_bracket: "]".to_string(),
+                        bad_line: i.line_num,
+                        bad_col: i.col_num,
+                    })?;
+                }
+                _ => {}
             }
         }
-        // Check whether each open bracket is closed
-        match num_open_brackets.cmp(&0) {
-            cmp::Ordering::Greater => {
-                return Err(BFError::BracketError {
-                    bad_bracket: "[".to_string(),
-                });
-            }
-            cmp::Ordering::Less => {
-                return Err(BFError::BracketError {
-                    bad_bracket: "]".to_string(),
-                });
-            }
-            cmp::Ordering::Equal => {}
+        // If any brackets remain, return an error
+        if !stack.is_empty() {
+            return Err(BFError::BracketError {
+                bad_bracket: "[".to_string(),
+                bad_line: line_last_open,
+                bad_col: col_last_open,
+            });
         }
         Ok(())
     }
 
     // AsRef: specifies that generic P is of any type which can be
     // implicitly converted into a ref to a path
-    /// Create a new BF program from a file name and its string-type content
+    /// Create a new BF program from a file and its contents
     pub fn new(file_name: P, content: String) -> Self {
         let mut instructions = Vec::new();
         let mut line_count = 1;
@@ -239,6 +244,8 @@ mod tests {
             result,
             Err(BFError::BracketError {
                 bad_bracket: "[".to_string(),
+                bad_col: 3,
+                bad_line: 1,
             })
         );
     }
@@ -246,12 +253,14 @@ mod tests {
     /// Too few open brackets
     #[test]
     fn bracket_error_closed() {
-        let prog = BFProgram::new("TestFile", "[]]".to_string());
+        let prog = BFProgram::new("TestFile", "[][]\n]".to_string());
         let result = prog.check_brackets_balanced();
         assert_eq!(
             result,
             Err(BFError::BracketError {
                 bad_bracket: "]".to_string(),
+                bad_col: 1,
+                bad_line: 2,
             })
         );
     }
