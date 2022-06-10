@@ -5,7 +5,7 @@
 #![warn(missing_docs)]
 
 use std::path::Path;
-use std::{cmp, fmt, fs};
+use std::{fmt, fs};
 use thiserror::Error;
 
 /// Enum for raw instructions, corresponding to the 8 input characters.
@@ -67,10 +67,13 @@ impl fmt::Display for RawInstruction {
 /// Enum for program errors
 pub enum BFError {
     #[error("Bracket not closed. Type is {}", bad_bracket)]
+    /// Bad bracket error type
     BracketError {
         /// Bad bracket: "[" or "]"
         bad_bracket: String,
+        /// Line of bad bracket
         bad_line: usize,
+        /// Col of bad bracket
         bad_col: usize,
     },
 }
@@ -117,6 +120,11 @@ pub struct BFProgram<P: AsRef<Path>> {
 }
 
 impl<P: AsRef<Path>> BFProgram<P> {
+    /// Getter function for file name
+    pub fn file_name(&self) -> &P {
+        &self.file_name
+    }
+
     /// Getter function for (private) instructions
     pub fn instructions(&self) -> &Vec<InputInstruction> {
         &self.instructions
@@ -162,7 +170,6 @@ impl<P: AsRef<Path>> BFProgram<P> {
         Ok(())
     }
 
-    // AsRef: specifies that generic P is of any type which can be
     // implicitly converted into a ref to a path
     /// Create a new BF program from a file and its contents
     pub fn new(file_name: P, content: String) -> Self {

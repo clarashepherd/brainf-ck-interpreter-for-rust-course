@@ -8,11 +8,26 @@ use std::path::Path;
 /// Represents virtual machine: tape with some number of cells, each of some type.
 /// Includes option to dynamically grow tape.
 pub struct VM<T> {
+    /// Number of cells
     num_cells: usize,
+    /// Tape
     tape: Vec<T>,
+    // Is tape allowed to dynamically grow?
     can_grow: bool,
 }
 impl<T> VM<T> {
+    /// Getter for number of cells
+    pub fn num_cells(&self) -> usize {
+        self.num_cells
+    }
+    /// Get tape
+    pub fn tape(&self) -> &Vec<T> {
+        &self.tape
+    }
+    /// Get cangrow
+    pub fn can_grow(&self) -> bool {
+        self.can_grow
+    }
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
     pub fn new(size: usize, can_grow: bool) -> Self {

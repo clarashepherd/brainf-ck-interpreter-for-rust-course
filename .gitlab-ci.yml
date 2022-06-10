@@ -1,0 +1,23 @@
+image: rust
+
+stages:
+        - build
+        - test
+        - doc
+
+build:
+        stage: build
+        before_script:
+                - rustup component add clippy
+        script:
+                - cargo clippy
+
+test:
+        stage: test
+        script:
+            - cargo test --all
+
+doc:
+        stage: doc
+        script:
+                - cargo doc --all
