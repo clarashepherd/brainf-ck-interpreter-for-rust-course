@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(
             result,
             Err(BFError::BracketError {
-                bad_bracket: '[',
+                bad_bracket: ']',
                 bad_col: 1,
                 bad_line: 2,
             })

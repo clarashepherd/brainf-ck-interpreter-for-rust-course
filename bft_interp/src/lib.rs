@@ -3,11 +3,16 @@
 #![warn(missing_docs)]
 
 use bft_types::BFProgram;
+use std::clone;
 use std::path::Path;
 
 /// Represents virtual machine: tape with some number of cells, each of some type.
 /// Includes option to dynamically grow tape.
-pub struct VM<T> {
+pub struct VM<T>
+where
+    // Satisfies base trait for numeric types, and clone
+    T: num_traits::Num + clone::Clone,
+{
     /// Number of cells
     num_cells: usize,
     /// Tape
@@ -15,7 +20,8 @@ pub struct VM<T> {
     // Is tape allowed to dynamically grow?
     can_grow: bool,
 }
-impl<T> VM<T> {
+// Note: T: ... syntax equivalent to a 'where'
+impl<T: num_traits::Num + clone::Clone> VM<T> {
     /// Getter for number of cells
     pub fn num_cells(&self) -> usize {
         self.num_cells
