@@ -70,7 +70,7 @@ pub enum BFError {
     /// Bad bracket error type
     BracketError {
         /// Bad bracket: "[" or "]"
-        bad_bracket: String,
+        bad_bracket: char,
         /// Line of bad bracket
         bad_line: usize,
         /// Col of bad bracket
@@ -151,7 +151,7 @@ impl<P: AsRef<Path>> BFProgram<P> {
                     // attempt to pop back
                     // if fail, return an error
                     stack.pop().ok_or(BFError::BracketError {
-                        bad_bracket: "]".to_string(),
+                        bad_bracket: ']',
                         bad_line: i.line_num,
                         bad_col: i.col_num,
                     })?;
@@ -162,7 +162,7 @@ impl<P: AsRef<Path>> BFProgram<P> {
         // If any brackets remain, return an error
         if !stack.is_empty() {
             return Err(BFError::BracketError {
-                bad_bracket: "[".to_string(),
+                bad_bracket: '[',
                 bad_line: line_last_open,
                 bad_col: col_last_open,
             });
@@ -250,7 +250,7 @@ mod tests {
         assert_eq!(
             result,
             Err(BFError::BracketError {
-                bad_bracket: "[".to_string(),
+                bad_bracket: '[',
                 bad_col: 3,
                 bad_line: 1,
             })
@@ -265,7 +265,7 @@ mod tests {
         assert_eq!(
             result,
             Err(BFError::BracketError {
-                bad_bracket: "]".to_string(),
+                bad_bracket: '[',
                 bad_col: 1,
                 bad_line: 2,
             })
