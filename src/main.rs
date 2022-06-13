@@ -13,6 +13,7 @@ use cli::Options;
 /// Run the interpreter, accepting CLI options
 fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
     let program = BFProgram::from_file(&opt.file_name)?;
+    // TODO don't like how the path's type was automatically specified above, but had to be manually specified below. Is there a way to avoid this?
     let vm: VM<usize, &path::PathBuf> = VM::new(&program, 0, false);
     vm.interpret(&program);
 

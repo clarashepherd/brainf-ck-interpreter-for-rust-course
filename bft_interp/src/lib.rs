@@ -2,7 +2,7 @@
 //! Currently just prints instructions.
 #![warn(missing_docs)]
 
-use bft_types::{BFProgram, RawInstruction};
+use bft_types::{BFProgram, InputInstruction};
 use std::clone;
 use std::path::Path;
 use thiserror::Error;
@@ -29,16 +29,16 @@ where
     can_grow: bool,
 }
 
-#[derive(Error, Debug, PartialEq)]
+#[derive(Error, Debug)]
 /// Enum for VM errors
-pub enum VMError {
+pub enum VMError<'a> {
     #[error("Some error message TODO")]
     /// Bad bracket error type
     InvalidHead {
         /// Error description
-        error_desciption: String,
+        error_desciption: &'a str,
         /// Instruction causing error
-        bad_instruction: RawInstruction,
+        bad_instruction: InputInstruction,
     },
 }
 
@@ -93,6 +93,32 @@ impl<'a, T: num_traits::Num + clone::Clone, P: AsRef<Path>> VM<'a, T, P> {
         for i in prog.instructions() {
             println!("{}", i);
         }
+    }
+    /// Move head left
+    /// TODO add tests
+    pub fn move_head_left(&mut self, i: InputInstruction) -> Result<(), VMError> {
+        if self.data_head == 0 {
+            return Err(VMError::InvalidHead {
+                error_desciption: "Head already at leftmost position",
+                // TODO bad instruction should be file, line, col
+                bad_instruction: i,
+            });
+        }
+        self.data_head -= 1;
+        Ok(())
+    }
+    /// Move head right
+    /// TODO add tests
+    pub fn move_head_right(&mut self, i: InputInstruction) -> Result<(), VMError> {
+        // TODO implementation
+        if self.data_head == self.num_cells - 1 {
+            return Err(VMError::InvalidHead {
+                error_desciption: "Head already at right position",
+                bad_instruction: i,
+            });
+        }
+        self.data_head -= 1;
+        Ok(())
     }
 }
 
