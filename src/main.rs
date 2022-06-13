@@ -1,7 +1,7 @@
 #![warn(missing_docs)]
 
 //! Main program
-use std::process;
+use std::{path, process};
 
 use bft_interp::VM;
 use bft_types::BFProgram;
@@ -12,9 +12,9 @@ use cli::Options;
 
 /// Run the interpreter, accepting CLI options
 fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
-    let prog = BFProgram::from_file(&opt.file_name)?;
-    let vm: VM<usize> = VM::new(0, false);
-    vm.interpret(&prog);
+    let program = BFProgram::from_file(&opt.file_name)?;
+    let vm: VM<usize, &path::PathBuf> = VM::new(&program, 0, false);
+    vm.interpret(&program);
 
     Ok(())
 }
