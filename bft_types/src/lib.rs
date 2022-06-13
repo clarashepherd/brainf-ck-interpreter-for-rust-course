@@ -79,7 +79,7 @@ pub enum BFError {
 }
 
 /// Represent an input instruction, inc. line and col numbers
-#[derive(Debug)]
+#[derive(Debug, std::cmp::PartialEq)]
 pub struct InputInstruction {
     instruction: RawInstruction,
     line_num: usize,
