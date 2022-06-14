@@ -225,7 +225,7 @@ mod tests {
         assert_eq!(prog.instructions[0].instruction, RawInstruction::PointerDec);
         // Test last instruction
         if let Some(last_input_instruction) = prog.instructions.last() {
-            println!("{:?}", last_input_instruction.instruction);
+            // println!("{:?}", last_input_instruction.instruction);
             assert_eq!(last_input_instruction.instruction, RawInstruction::ByteOut);
         }
         // Test for correct number of instructions
