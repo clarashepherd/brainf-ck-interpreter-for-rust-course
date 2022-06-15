@@ -5,6 +5,8 @@
 use bft_types::{BFProgram, InputInstruction};
 use std::clone;
 use std::cmp;
+use std::convert;
+use std::io::{Read, Write};
 use std::path::Path;
 use thiserror::Error;
 
@@ -15,7 +17,7 @@ use thiserror::Error;
 pub struct VM<'a, T, P>
 where
     // Satisfies base trait for numeric types, and clone
-    T: num_traits::Num + clone::Clone,
+    T: num_traits::Num + clone::Clone + convert::From<u8>,
     P: AsRef<Path>,
 {
     /// Borrow of program TOOD why
@@ -45,18 +47,30 @@ pub enum VMError<'a, 'b> {
     },
     #[error("Another error message TODO")]
     /// Oversize/negative error type
-    InvalidValue {
+    InvalidPointer {
         /// Error description
         error_description: &'a str,
+        /// Instruction causing error
+        bad_instruction: &'b InputInstruction,
+    },
+    #[error("Some error message TODO")]
+    /// I/O errors from reader/writer functionality
+    IOError {
+        /// Eror desscription
+        error_desciption: &'a str,
         /// Instruction causing error
         bad_instruction: &'b InputInstruction,
     },
 }
 
 #[derive(Error, Debug)]
-pub enum SizeError {
+/// Error returned when attempting to increase data pointer beyond tape size,
+/// or below zero
+pub enum TapeSizeError {
+    /// Too large
     #[error("Some error message TODO")]
     TooLarge,
+    /// Too small
     #[error("Another error message TODO")]
     TooSmall,
 }
@@ -67,42 +81,66 @@ pub enum SizeError {
 /// e.g. 255+1 = 0
 pub trait CellKind {
     /// Increment value by one
-    fn inc_value(&self) -> Result<Self, SizeError>
+    fn inc_value(&self) -> Result<Self, TapeSizeError>
     where
         Self: std::marker::Sized;
     /// Decrement value by one
-    fn sub_value(&self) -> Result<Self, SizeError>
+    fn sub_value(&self) -> Result<Self, TapeSizeError>
     where
         Self: std::marker::Sized;
 }
 
 impl CellKind for u8 {
-    fn inc_value(&self) -> Result<Self, SizeError> {
+    fn inc_value(&self) -> Result<Self, TapeSizeError> {
         let ans = self.wrapping_add(1);
         // Note: had an error here.
         // Was testing (ans-self <0), but u8 can't be negative
         if &ans < self {
-            println!("Returning size error");
-            return Err(SizeError::TooLarge);
+            return Err(TapeSizeError::TooLarge);
         }
         Ok(ans)
     }
-    fn sub_value(&self) -> Result<Self, SizeError> {
+    fn sub_value(&self) -> Result<Self, TapeSizeError> {
         let ans = self.wrapping_sub(1);
         // TODO comment
         if &ans > self {
-            println!("Returning size error");
-            return Err(SizeError::TooSmall);
+            return Err(TapeSizeError::TooSmall);
         }
         Ok(ans)
+    }
+}
+
+/// Trait for "can get the first byte"
+pub trait FirstByte {
+    /// Returns first byte of some multi-byte number type
+    fn first_byte(&self) -> u8;
+}
+
+impl FirstByte for u8 {
+    fn first_byte(&self) -> u8 {
+        *self
+    }
+}
+impl FirstByte for u16 {
+    fn first_byte(&self) -> u8 {
+        let bytes = self.to_be_bytes();
+        bytes[0]
     }
 }
 
 // Note: "T: something satisfying CellKind trait"
 // Only u8 satisfies CellKind, so T must currently be a u8
 // Note: T: ... syntax equivalent to a 'where'
-impl<'a, T: num_traits::Num + clone::Clone + CellKind + std::default::Default, P: AsRef<Path>>
-    VM<'a, T, P>
+impl<
+        'a,
+        T: num_traits::Num
+            + clone::Clone
+            + CellKind
+            + std::default::Default
+            + convert::From<u8>
+            + FirstByte,
+        P: AsRef<Path>,
+    > VM<'a, T, P>
 {
     /// Get program
     pub fn prog(&'a self) -> &BFProgram<P> {
@@ -129,8 +167,8 @@ impl<'a, T: num_traits::Num + clone::Clone + CellKind + std::default::Default, P
         self.instruction_head
     }
     /// Get value at data head
-    pub fn head_value(&self) -> &T {
-        &self.tape[self.data_head]
+    pub fn head_value(&mut self) -> &T {
+        &mut self.tape[self.data_head]
     }
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
@@ -187,9 +225,9 @@ impl<'a, T: num_traits::Num + clone::Clone + CellKind + std::default::Default, P
         let new_value = self.tape[self.data_head].inc_value();
         // If returns error, then test
         match new_value {
-            Err(e) => {
+            Err(_e) => {
                 println!("FAILED");
-                return Err(VMError::InvalidValue {
+                return Err(VMError::InvalidPointer {
                     error_description: "Value too large for data type",
                     bad_instruction: i,
                 });
@@ -203,13 +241,12 @@ impl<'a, T: num_traits::Num + clone::Clone + CellKind + std::default::Default, P
     }
     /// Decrement value at particular position, returning an error if less than zero
     pub fn decrement_value(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        // TODO test
         let new_value = self.tape[self.data_head].sub_value();
-        // If returns error, then test
+        // If returns error, then TODO
         match new_value {
-            Err(e) => {
+            Err(_e) => {
                 println!("FAILED");
-                return Err(VMError::InvalidValue {
+                return Err(VMError::InvalidPointer {
                     error_description: "Value cannot be smaller than zero",
                     bad_instruction: i,
                 });
@@ -219,6 +256,48 @@ impl<'a, T: num_traits::Num + clone::Clone + CellKind + std::default::Default, P
                 self.tape[self.data_head] = ans;
             }
         }
+        Ok(())
+    }
+    /// Read byte from reader into data head's cell (ie "," command)
+    // TODO think this works
+    // TODO test inc type conversion
+    pub fn read_byte(
+        &mut self,
+        i: &'a InputInstruction,
+        reader: &mut dyn Read,
+    ) -> Result<(), VMError> {
+        let buff: &mut [u8] = Default::default();
+        // Read one byte from reader into buffer
+        // Read first byte
+        match reader.read_exact(buff) {
+            Ok(()) => {
+                // convert buffer byte (u8) to generic type
+                self.tape[self.data_head] = T::from(buff[0]);
+                Ok(())
+            }
+            Err(_e) => Err(VMError::IOError {
+                error_desciption: "Error reading data byte",
+                bad_instruction: i,
+            }),
+        }
+    }
+    /// Output data byte
+    pub fn out_byte(
+        &mut self,
+        i: &'a InputInstruction,
+        writer: &mut dyn Write,
+    ) -> Result<(), VMError> {
+        //TODO implementation
+        // Try to store value as byte
+        // If ok, write to writer
+        let buff: &mut [u8] = Default::default();
+        buff[0] = self.tape[self.data_head].first_byte();
+        if let Err(_e) = writer.write(buff) {
+            return Err(VMError::IOError {
+                error_desciption: "Error reading data byte",
+                bad_instruction: i,
+            });
+        };
         Ok(())
     }
 }
@@ -318,7 +397,7 @@ mod tests {
         let ans = vm.increment_value(i);
         assert_eq!(
             ans,
-            Err(VMError::InvalidValue {
+            Err(VMError::InvalidPointer {
                 error_description: "Value too large for data type",
                 bad_instruction: i
             })
@@ -336,7 +415,7 @@ mod tests {
         let ans = vm.decrement_value(i);
         assert_eq!(
             ans,
-            Err(VMError::InvalidValue {
+            Err(VMError::InvalidPointer {
                 error_description: "Value cannot be smaller than zero",
                 bad_instruction: i
             })
