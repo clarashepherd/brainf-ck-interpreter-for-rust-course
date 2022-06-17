@@ -101,8 +101,7 @@ pub trait CellKind {
 impl CellKind for u8 {
     fn inc_value(&self) -> Result<Self, TapeSizeError> {
         let ans = self.wrapping_add(1);
-        // Note: had an error here.
-        // Was testing (ans-self <0), but u8 can't be negative
+        // Addition and subtraction is mod(u8::SIZE)
         if &ans < self {
             return Err(TapeSizeError::TooLarge);
         }
@@ -110,7 +109,28 @@ impl CellKind for u8 {
     }
     fn sub_value(&self) -> Result<Self, TapeSizeError> {
         let ans = self.wrapping_sub(1);
-        // TODO comment
+        // Addition and subtraction is mod(u8::SIZE)
+        if &ans > self {
+            return Err(TapeSizeError::TooSmall);
+        }
+        Ok(ans)
+    }
+}
+
+impl CellKind for u16 {
+    // TODO this was copied from above, only type changed.
+    // Is there a way to avoid this duplication?
+    fn inc_value(&self) -> Result<Self, TapeSizeError> {
+        let ans = self.wrapping_add(1);
+        // Addition and subtraction is mod(u16::SIZE)
+        if &ans < self {
+            return Err(TapeSizeError::TooLarge);
+        }
+        Ok(ans)
+    }
+    fn sub_value(&self) -> Result<Self, TapeSizeError> {
+        let ans = self.wrapping_sub(1);
+        // Addition and subtraction is mod(u8::SIZE)
         if &ans > self {
             return Err(TapeSizeError::TooSmall);
         }
@@ -131,13 +151,10 @@ impl FirstByte for u8 {
 }
 impl FirstByte for u16 {
     fn first_byte(&self) -> u8 {
-        let bytes = self.to_be_bytes();
-        bytes[0]
+        self.to_be_bytes()[0]
     }
 }
 
-// Note: "T: something satisfying CellKind trait"
-// Only u8 satisfies CellKind, so T must currently be a u8
 // Note: T: ... syntax equivalent to a 'where'
 impl<
         'a,
@@ -217,7 +234,6 @@ impl<
     }
     /// Move head right
     pub fn move_head_right(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        // TODO implementation
         if self.data_head == self.num_cells - 1 {
             return Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
@@ -229,7 +245,6 @@ impl<
     }
     /// Increment value at a particular position, returning an error if value is too high
     pub fn increment_value(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        // TODO test
         let new_value = self.tape[self.data_head].inc_value();
         // If returns error, then test
         match new_value {
@@ -241,7 +256,6 @@ impl<
                 });
             }
             Ok(ans) => {
-                println!("OK");
                 self.tape[self.data_head] = ans;
             }
         }
@@ -250,10 +264,8 @@ impl<
     /// Decrement value at particular position, returning an error if less than zero
     pub fn decrement_value(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
         let new_value = self.tape[self.data_head].sub_value();
-        // If returns error, then TODO
         match new_value {
             Err(_e) => {
-                println!("FAILED");
                 return Err(VMError::InvalidData {
                     error_description: "Value cannot be smaller than zero",
                     bad_instruction: i,
@@ -267,25 +279,25 @@ impl<
         Ok(())
     }
     /// Read byte from reader into data head's cell (ie "," command)
-    // TODO test inc type conversion
     pub fn read_byte(
         &mut self,
         i: &'a InputInstruction,
         reader: &mut dyn Read,
     ) -> Result<(), VMError> {
-        let buff: &mut [u8] = Default::default();
-        // Read one byte from reader into buffer
-        // Read first byte
-        match reader.read_exact(buff) {
+        let mut buff = [0; 1];
+        match reader.read_exact(&mut buff) {
             Ok(()) => {
                 // convert buffer byte (u8) to generic type
-                self.tape[self.data_head] = T::from(buff[0]);
+                self.tape[self.data_head] = buff[0].into();
                 Ok(())
             }
-            Err(_e) => Err(VMError::IOError {
-                error_desciption: "Error reading data byte",
-                bad_instruction: i,
-            }),
+            Err(_e) => {
+                // println!("IO ERROR");
+                Err(VMError::IOError {
+                    error_desciption: "Error reading data byte",
+                    bad_instruction: i,
+                })
+            }
         }
     }
     /// Output data byte
@@ -294,12 +306,12 @@ impl<
         i: &'a InputInstruction,
         writer: &mut dyn Write,
     ) -> Result<(), VMError> {
-        //TODO implementation
-        // Try to store value as byte
-        // If ok, write to writer
-        let buff: &mut [u8] = Default::default();
+        // Stores first byte of cell's value
+        // But needs to be as large as largest number type, for conversion
+        let mut buff = [0; 1];
         buff[0] = self.tape[self.data_head].first_byte();
-        if let Err(_e) = writer.write(buff) {
+        // Write first byte to writer
+        if let Err(_e) = writer.write(&buff) {
             return Err(VMError::IOError {
                 error_desciption: "Error reading data byte",
                 bad_instruction: i,
@@ -317,7 +329,9 @@ mod tests {
     use bft_types::{InputInstruction, RawInstruction};
 
     use crate::BFProgram;
+    //use crate::FirstByte;
     use crate::VM;
+    use std::io::Cursor;
 
     #[test]
     fn test_interpret() {
@@ -338,7 +352,7 @@ mod tests {
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
-                error_description: "Head already at leftmost position",
+                error_description: "can't be below zero",
                 bad_instruction: i
             })
         );
@@ -359,7 +373,7 @@ mod tests {
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
-                error_description: "Head already at rightmost position",
+                error_description: "can't exceed rightmost position",
                 bad_instruction: i
             })
         );
@@ -419,7 +433,7 @@ mod tests {
     fn data_dec_fail_low() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
-        let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
+        let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
         assert_eq!(vm.data_head(), 0);
         assert_eq!(vm.tape[vm.data_head], 0);
         // Try to decrease below zero
@@ -438,9 +452,37 @@ mod tests {
     // Read one byte into first cell
     // Check first cell contains new byte, second unchanged
 
-    // Test out_byte
-    // Create VM with 2 cells, u8 type
-    // Initialise a reader using Cursor trait (why?)
-    // Read one byte into first cell
-    // Check first cell contains new byte, second unchanged
+    #[test]
+    /// Test read_byte from spoofed reader.
+    /// Check works when VM's data type is *not u8.
+    fn read_byte_ok() {
+        let p = BFProgram::new("TestFile", "<>.hello.".to_string());
+        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
+        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        // non-shared bit
+        let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
+        vm.read_byte(i, &mut spoofed_reader).unwrap();
+        // Reader should be unchanged
+        assert_eq!(spoofed_reader.into_inner(), vec![11, 12, 13]);
+        // Tape's first bit should be changed
+        assert_eq!(*vm.tape(), vec![11, 0, 0, 0, 0]);
+    }
+
+    #[test]
+    /// Test outputting data byte into spoofed writer.
+    /// Check works when VM's data type is *not* u8.
+    fn out_byte_ok() {
+        let p = BFProgram::new("TestFile", "<>.hello.".to_string());
+        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
+        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        // non-shared bit
+        let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
+        vm.out_byte(i, &mut spoofed_writer).unwrap();
+        // Tape's first bit should be unchanged
+        assert_eq!(*vm.tape(), vec![0, 0, 0, 0, 0]);
+        // Writer's first bit should have changed
+        assert_eq!(spoofed_writer.into_inner(), vec![0, 12, 13]);
+    }
+
+    // Test test input non-u8 data into u8 VM
 }
