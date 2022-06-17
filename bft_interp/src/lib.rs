@@ -37,23 +37,31 @@ where
 #[derive(Error, Debug, cmp::PartialEq)]
 /// Enum for VM errors
 pub enum VMError<'a, 'b> {
-    #[error("Some error message TODO")]
+    #[error(
+        "Invalid head position: {}, bad instruction: {}",
+        error_description,
+        bad_instruction
+    )]
     /// Bad bracket error type
     InvalidHead {
-        /// Error description
-        error_desciption: &'a str,
-        /// Instruction causing error
-        bad_instruction: &'b InputInstruction,
-    },
-    #[error("Another error message TODO")]
-    /// Oversize/negative error type
-    InvalidPointer {
         /// Error description
         error_description: &'a str,
         /// Instruction causing error
         bad_instruction: &'b InputInstruction,
     },
-    #[error("Some error message TODO")]
+    #[error(
+        "Invalid head position: {}, bad instruction: {}",
+        error_description,
+        bad_instruction
+    )]
+    /// Oversize/negative error type
+    InvalidData {
+        /// Error description
+        error_description: &'a str,
+        /// Instruction causing error
+        bad_instruction: &'b InputInstruction,
+    },
+    #[error("I/O error, bad instruction: {}", bad_instruction)]
     /// I/O errors from reader/writer functionality
     IOError {
         /// Eror desscription
@@ -64,14 +72,14 @@ pub enum VMError<'a, 'b> {
 }
 
 #[derive(Error, Debug)]
-/// Error returned when attempting to increase data pointer beyond tape size,
+/// Error returned when attempting to increase data pointer's value beyond tape size,
 /// or below zero
 pub enum TapeSizeError {
     /// Too large
-    #[error("Some error message TODO")]
+    #[error("Value too large for tape's data type")]
     TooLarge,
     /// Too small
-    #[error("Another error message TODO")]
+    #[error("Value too small for tape's data type (ie negative if unsigned)")]
     TooSmall,
 }
 
@@ -200,7 +208,7 @@ impl<
     pub fn move_head_left(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
         if self.data_head == 0 {
             return Err(VMError::InvalidHead {
-                error_desciption: "Head already at leftmost position",
+                error_description: "can't be below zero",
                 bad_instruction: i,
             });
         }
@@ -212,7 +220,7 @@ impl<
         // TODO implementation
         if self.data_head == self.num_cells - 1 {
             return Err(VMError::InvalidHead {
-                error_desciption: "Head already at rightmost position",
+                error_description: "can't exceed rightmost position",
                 bad_instruction: i,
             });
         }
@@ -227,7 +235,7 @@ impl<
         match new_value {
             Err(_e) => {
                 println!("FAILED");
-                return Err(VMError::InvalidPointer {
+                return Err(VMError::InvalidData {
                     error_description: "Value too large for data type",
                     bad_instruction: i,
                 });
@@ -246,7 +254,7 @@ impl<
         match new_value {
             Err(_e) => {
                 println!("FAILED");
-                return Err(VMError::InvalidPointer {
+                return Err(VMError::InvalidData {
                     error_description: "Value cannot be smaller than zero",
                     bad_instruction: i,
                 });
@@ -259,7 +267,6 @@ impl<
         Ok(())
     }
     /// Read byte from reader into data head's cell (ie "," command)
-    // TODO think this works
     // TODO test inc type conversion
     pub fn read_byte(
         &mut self,
@@ -331,7 +338,7 @@ mod tests {
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
-                error_desciption: "Head already at leftmost position",
+                error_description: "Head already at leftmost position",
                 bad_instruction: i
             })
         );
@@ -352,7 +359,7 @@ mod tests {
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
-                error_desciption: "Head already at rightmost position",
+                error_description: "Head already at rightmost position",
                 bad_instruction: i
             })
         );
@@ -376,6 +383,8 @@ mod tests {
     }
 
     #[test]
+    /// Tape of u8 type.
+    /// Increase value of cell to beyond u8's max size
     fn data_inc_dec_ok_fail_high() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
@@ -397,7 +406,7 @@ mod tests {
         let ans = vm.increment_value(i);
         assert_eq!(
             ans,
-            Err(VMError::InvalidPointer {
+            Err(VMError::InvalidData {
                 error_description: "Value too large for data type",
                 bad_instruction: i
             })
@@ -405,6 +414,8 @@ mod tests {
     }
 
     #[test]
+    /// Tape of u8 type.
+    /// Try setting value of cell to less than zero
     fn data_dec_fail_low() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
@@ -415,10 +426,21 @@ mod tests {
         let ans = vm.decrement_value(i);
         assert_eq!(
             ans,
-            Err(VMError::InvalidPointer {
+            Err(VMError::InvalidData {
                 error_description: "Value cannot be smaller than zero",
                 bad_instruction: i
             })
         );
     }
+    // Test read_byte
+    // Create VM with 2 cells, u8 type
+    // Initialise a reader using Cursor trait (why?)
+    // Read one byte into first cell
+    // Check first cell contains new byte, second unchanged
+
+    // Test out_byte
+    // Create VM with 2 cells, u8 type
+    // Initialise a reader using Cursor trait (why?)
+    // Read one byte into first cell
+    // Check first cell contains new byte, second unchanged
 }
