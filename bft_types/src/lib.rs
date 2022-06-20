@@ -11,21 +11,21 @@ use thiserror::Error;
 /// Enum for raw instructions, corresponding to the 8 input characters.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub enum RawInstruction {
-    /// Increment pointer
+    /// Increment data pointer
     PointerInc,
-    /// Decrement pointer
+    /// Decrement data pointer
     PointerDec,
-    /// Increment data byte
+    /// Increment byte at data pointer's cell
     ByteInc,
-    /// Decrement data byte
+    /// Decrement byte at data pointer's cell
     ByteDec,
-    /// Output data byte
-    ByteOut,
-    /// Accept data byte
-    ByteAccept,
-    /// If zero, jump forward
+    /// Output one byte of data from data pointer's cell
+    OutByte,
+    /// Read one byte into data pointer's cell
+    ReadByte,
+    /// If byte at data pointer is zero, jump instruction pointer forawrd to matching "]"
     JumpForward,
-    /// If zero, jump backward
+    /// If byte at data pointer is nonzero, jump instruction pointer back to matching "["
     JumpBack,
 }
 
@@ -38,8 +38,8 @@ impl RawInstruction {
             '<' => Some(Self::PointerDec),
             '+' => Some(Self::ByteInc),
             '-' => Some(Self::ByteDec),
-            '.' => Some(Self::ByteOut),
-            ',' => Some(Self::ByteAccept),
+            '.' => Some(Self::OutByte),
+            ',' => Some(Self::ReadByte),
             '[' => Some(Self::JumpForward),
             ']' => Some(Self::JumpBack),
             _ => None,
@@ -51,14 +51,22 @@ impl fmt::Display for RawInstruction {
     /// Print interpretation of instruction.
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            RawInstruction::PointerDec => write!(f, "Decrement current location"),
-            RawInstruction::PointerInc => write!(f, "Increment current location"),
-            RawInstruction::ByteInc => write!(f, "Increment data"),
-            RawInstruction::ByteDec => write!(f, "Decrement data"),
-            RawInstruction::ByteAccept => write!(f, "Accept Data"),
-            RawInstruction::ByteOut => write!(f, "Output Data"),
-            RawInstruction::JumpForward => write!(f, "If zero jump forward to next ]"),
-            RawInstruction::JumpBack => write!(f, "If non zero jump back to previous ["),
+            RawInstruction::PointerDec => write!(f, "Decrement data pointer"),
+            RawInstruction::PointerInc => write!(f, "Increment data pointer"),
+            RawInstruction::ByteInc => write!(f, "Increment byte at data pointer's cell"),
+            RawInstruction::ByteDec => write!(f, "Decrement byte at data pointer's cell"),
+            RawInstruction::ReadByte => write!(f, " Read one byte into data pointer's cell"),
+            RawInstruction::OutByte => {
+                write!(f, "OOutput one byte of data from data pointer's cell")
+            }
+            RawInstruction::JumpForward => write!(
+                f,
+                "If byte at data pointer is zero, jump instruction pointer forawrd to matching ']'"
+            ),
+            RawInstruction::JumpBack => write!(
+                f,
+                "If byte at data pointer is nonzero, jump instruction pointer back to matching '['"
+            ),
         }
     }
 }
@@ -226,7 +234,7 @@ mod tests {
         // Test last instruction
         if let Some(last_input_instruction) = prog.instructions.last() {
             // println!("{:?}", last_input_instruction.instruction);
-            assert_eq!(last_input_instruction.instruction, RawInstruction::ByteOut);
+            assert_eq!(last_input_instruction.instruction, RawInstruction::OutByte);
         }
         // Test for correct number of instructions
         assert_eq!(prog.instructions.len(), 9);
