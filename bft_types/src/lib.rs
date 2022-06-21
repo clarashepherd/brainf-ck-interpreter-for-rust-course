@@ -57,7 +57,7 @@ impl fmt::Display for RawInstruction {
             RawInstruction::ByteDec => write!(f, "Decrement byte at data pointer's cell"),
             RawInstruction::ReadByte => write!(f, " Read one byte into data pointer's cell"),
             RawInstruction::OutByte => {
-                write!(f, "OOutput one byte of data from data pointer's cell")
+                write!(f, "Output one byte of data from data pointer's cell")
             }
             RawInstruction::JumpForward => write!(
                 f,
@@ -95,6 +95,10 @@ pub struct InputInstruction {
 }
 
 impl InputInstruction {
+    /// Getter function for input instruction
+    pub fn instruction(&self) -> RawInstruction {
+        self.instruction
+    }
     /// Create a new input instruction
     pub fn new(instruction: RawInstruction, line_num: usize, col_num: usize) -> Self {
         Self {

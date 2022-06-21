@@ -2,6 +2,7 @@
 //! Currently just prints instructions.
 #![warn(missing_docs)]
 
+use bft_types::RawInstruction;
 use bft_types::{BFProgram, InputInstruction};
 use std::clone;
 use std::cmp;
@@ -25,9 +26,9 @@ where
     /// Number of cells
     num_cells: usize,
     /// Location of data pointer's head
-    data_head: usize,
+    data_pointer: usize,
     /// Location of instruction pointer (program counter)
-    instruction_head: usize,
+    instruction_pointer: usize,
     /// Tape
     tape: Vec<T>,
     /// Is tape allowed to dynamically grow?
@@ -67,6 +68,14 @@ pub enum VMError<'a, 'b> {
         /// Eror desscription
         error_desciption: &'a str,
         /// Instruction causing error
+        bad_instruction: &'b InputInstruction,
+    },
+    #[error("Can't find matching bracket, bad instruction {}", bad_instruction)]
+    /// Bracket error not picked up by matching
+    CantFindBracket {
+        /// Error description
+        error_description: &'a str,
+        /// Instructin causing error
         bad_instruction: &'b InputInstruction,
     },
 }
@@ -184,16 +193,16 @@ impl<
         self.can_grow
     }
     /// Get head pos
-    pub fn data_head(&self) -> usize {
-        self.data_head
+    pub fn data_pointer(&self) -> usize {
+        self.data_pointer
     }
     /// Get instruction head
-    pub fn instruction_head(&self) -> usize {
-        self.instruction_head
+    pub fn instruction_pointer(&self) -> usize {
+        self.instruction_pointer
     }
     /// Get value at data head
     pub fn head_value(&mut self) -> &T {
-        &mut self.tape[self.data_head]
+        &mut self.tape[self.data_pointer]
     }
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
@@ -208,8 +217,8 @@ impl<
             num_cells,
             tape,
             can_grow,
-            data_head: 0,
-            instruction_head: 0,
+            data_pointer: 0,
+            instruction_pointer: 0,
         }
     }
 
@@ -221,49 +230,50 @@ impl<
             println!("{}", i);
         }
     }
-    /// Move head left
-    pub fn move_head_left(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        if self.data_head == 0 {
+    // Actions corresponding to input instructions.
+    // All these functions return the next instruction pointer to use
+    /// Move head left.
+    pub fn move_head_left(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        if self.data_pointer == 0 {
             return Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
                 bad_instruction: i,
             });
         }
-        self.data_head -= 1;
-        Ok(())
+        self.data_pointer -= 1;
+        Ok(self.instruction_pointer + 1)
     }
     /// Move head right
-    pub fn move_head_right(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        if self.data_head == self.num_cells - 1 {
+    pub fn move_head_right(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        if self.data_pointer == self.num_cells - 1 {
             return Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
                 bad_instruction: i,
             });
         }
-        self.data_head += 1;
-        Ok(())
+        self.data_pointer += 1;
+        Ok(self.instruction_pointer + 1)
     }
     /// Increment value at a particular position, returning an error if value is too high
-    pub fn increment_value(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        let new_value = self.tape[self.data_head].inc_value();
+    pub fn increment_value(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        let new_value = self.tape[self.data_pointer].inc_value();
         // If returns error, then test
         match new_value {
             Err(_e) => {
-                println!("FAILED");
                 return Err(VMError::InvalidData {
                     error_description: "Value too large for data type",
                     bad_instruction: i,
                 });
             }
             Ok(ans) => {
-                self.tape[self.data_head] = ans;
+                self.tape[self.data_pointer] = ans;
             }
         }
-        Ok(())
+        Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
-    pub fn decrement_value(&mut self, i: &'a InputInstruction) -> Result<(), VMError> {
-        let new_value = self.tape[self.data_head].sub_value();
+    pub fn decrement_value(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        let new_value = self.tape[self.data_pointer].sub_value();
         match new_value {
             Err(_e) => {
                 return Err(VMError::InvalidData {
@@ -272,24 +282,23 @@ impl<
                 });
             }
             Ok(ans) => {
-                println!("OK");
-                self.tape[self.data_head] = ans;
+                self.tape[self.data_pointer] = ans;
             }
         }
-        Ok(())
+        Ok(self.instruction_pointer + 1)
     }
     /// Read byte from reader into data head's cell (ie "," command)
     pub fn read_byte(
         &mut self,
         i: &'a InputInstruction,
         reader: &mut dyn Read,
-    ) -> Result<(), VMError> {
+    ) -> Result<usize, VMError> {
         let mut buff = [0; 1];
         match reader.read_exact(&mut buff) {
             Ok(()) => {
                 // convert buffer byte (u8) to generic type
-                self.tape[self.data_head] = buff[0].into();
-                Ok(())
+                self.tape[self.data_pointer] = buff[0].into();
+                Ok(self.instruction_pointer + 1)
             }
             Err(_e) => {
                 // println!("IO ERROR");
@@ -305,11 +314,11 @@ impl<
         &mut self,
         i: &'a InputInstruction,
         writer: &mut dyn Write,
-    ) -> Result<(), VMError> {
-        // Stores first byte of cell's value
-        // But needs to be as large as largest number type, for conversion
+    ) -> Result<usize, VMError> {
+        // Stores first byte of cell's value.
+        // But needs to be as large as largest number type, for conversion.
         let mut buff = [0; 1];
-        buff[0] = self.tape[self.data_head].first_byte();
+        buff[0] = self.tape[self.data_pointer].first_byte();
         // Write first byte to writer
         if let Err(_e) = writer.write(&buff) {
             return Err(VMError::IOError {
@@ -317,7 +326,26 @@ impl<
                 bad_instruction: i,
             });
         };
-        Ok(())
+        Ok(self.instruction_pointer + 1)
+    }
+    /// Unconditionally jump program counter forward to matching "]" instruction.
+    pub fn jump_forward(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        // Search beyond current instruction pointer for next instruction corresponding to "]".
+        let pos_next_jump_back = self
+            .prog
+            .instructions()
+            .iter()
+            .skip(self.instruction_pointer + 1)
+            .position(|x| x.instruction() == RawInstruction::JumpBack);
+        // Don't expect any errors here: should have caught in bracket matching.
+        // Counting from position of instruction pointer
+        match pos_next_jump_back {
+            Some(pos) => Ok(pos + self.instruction_pointer + 1),
+            None => Err(VMError::CantFindBracket {
+                error_description: "Can't find matching ']' bracket",
+                bad_instruction: i,
+            }),
+        }
     }
 }
 
@@ -333,13 +361,13 @@ mod tests {
     use crate::VM;
     use std::io::Cursor;
 
-    #[test]
+    /*#[test]
     fn test_interpret() {
         // Not really a test. Just for debugging with "-- --nocapture"
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let vm: VM<u8, &str> = VM::new(&p, 0, false);
         vm.interpret(vm.prog);
-    }
+    }*/
 
     #[test]
     /// Check for failure when pointer goes too far left
@@ -347,7 +375,7 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
-        assert_eq!(vm.data_head, 0);
+        assert_eq!(vm.data_pointer, 0);
         let ans = vm.move_head_left(i);
         assert_eq!(
             ans,
@@ -364,7 +392,7 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
-        assert_eq!(vm.data_head, 0);
+        assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..vm.num_cells() - 1 {
             _ans = vm.move_head_right(i);
@@ -384,16 +412,16 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
-        assert_eq!(vm.data_head, 0);
+        assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..10 {
             _ans = vm.move_head_right(i);
         }
-        assert_eq!(vm.data_head, 10);
+        assert_eq!(vm.data_pointer, 10);
         for _n in 0..5 {
             _ans = vm.move_head_left(i);
         }
-        assert_eq!(vm.data_head, 5);
+        assert_eq!(vm.data_pointer, 5);
     }
 
     #[test]
@@ -403,8 +431,8 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
-        assert_eq!(vm.data_head(), 0);
-        assert_eq!(vm.tape[vm.data_head], 0);
+        assert_eq!(vm.data_pointer(), 0);
+        assert_eq!(vm.tape[vm.data_pointer], 0);
         // Increase to max size
         for _n in 0..255 {
             let _ans = vm.increment_value(i);
@@ -434,8 +462,8 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
-        assert_eq!(vm.data_head(), 0);
-        assert_eq!(vm.tape[vm.data_head], 0);
+        assert_eq!(vm.data_pointer(), 0);
+        assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
         let ans = vm.decrement_value(i);
         assert_eq!(
@@ -484,5 +512,27 @@ mod tests {
         assert_eq!(spoofed_writer.into_inner(), vec![0, 12, 13]);
     }
 
-    // Test test input non-u8 data into u8 VM
+    #[test]
+    /// Test unconditonal jump to "]"
+    fn jump_forward_ok_fail() {
+        let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
+        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
+        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        // Spoof position of first "[".
+        // Note: only valid instructions are counted, so the first "[" is at position 1, "]" at position 4.
+        // Correctly find "]" position.
+        vm.instruction_pointer = 1;
+        let mut ans = vm.jump_forward(i);
+        assert_eq!(ans, Ok(4));
+        // Return an error when can't find matching bracket.
+        vm.instruction_pointer = 4;
+        ans = vm.jump_forward(i);
+        assert_eq!(
+            ans,
+            Err(VMError::CantFindBracket {
+                error_description: "Can't find matching ']' bracket",
+                bad_instruction: i
+            })
+        );
+    }
 }
