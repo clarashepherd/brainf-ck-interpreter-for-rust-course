@@ -15,10 +15,11 @@ use thiserror::Error;
 /// Includes option to dynamically grow tape.
 // TODO how to make this lifetime compatible with that of VM?
 // I can't currently let VMError return a *reference* to an instruction
+#[derive(Clone)]
 pub struct VM<'a, T, P>
 where
     // Satisfies base trait for numeric types, and clone
-    T: num_traits::Num + clone::Clone + convert::From<u8>,
+    T: num_traits::Num + num_traits::Zero + clone::Clone + convert::From<u8>,
     P: AsRef<Path>,
 {
     /// Borrow of program TOOD why
@@ -168,6 +169,7 @@ impl FirstByte for u16 {
 impl<
         'a,
         T: num_traits::Num
+            + num_traits::Zero
             + clone::Clone
             + CellKind
             + std::default::Default
@@ -345,6 +347,36 @@ impl<
                 error_description: "Can't find matching ']' bracket",
                 bad_instruction: i,
             }),
+        }
+    }
+    /// Conditionally jump program counter forward to matching "[" instruction.
+    /// Condition: byte at data pointer *not* zero.
+    pub fn jump_back(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+        // Search beyond current instruction pointer for next instruction corresponding to "[".
+        if !self.tape[self.data_pointer].is_zero() {
+            let num_instructions = self.prog.instructions().len();
+            let skip_from_rhs = num_instructions - self.instruction_pointer;
+            //println!("JUMP BACK: skip_from_rhs = {}", skip_from_rhs);
+            let pos_next_jump_forward = self
+                .prog
+                .instructions()
+                .iter()
+                .rev()
+                .skip(skip_from_rhs)
+                .position(|x| x.instruction() == RawInstruction::JumpForward);
+            // Don't expect any errors here: should have caught in bracket matching.
+            match pos_next_jump_forward {
+                Some(pos) => {
+                    println!("Number of extra RHS iterations: {}", pos);
+                    Ok(self.instruction_pointer - pos - 1)
+                }
+                None => Err(VMError::CantFindBracket {
+                    error_description: "Can't find matching '[' bracket",
+                    bad_instruction: i,
+                }),
+            }
+        } else {
+            Ok(self.instruction_pointer() + 1)
         }
     }
 }
@@ -534,5 +566,56 @@ mod tests {
                 bad_instruction: i
             })
         );
+    }
+    #[test]
+    /// Test conditional jump to "]"
+    fn jump_back_ok_fail() {
+        println!("JUMP BACK TEST");
+        let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
+        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
+        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        /////////////////////
+        // Nonzero data bit, do jumps
+        //
+        // Spoof position of first "]".
+        // Correctly find "[" position"]
+        vm.tape[vm.data_pointer] = 100;
+        vm.instruction_pointer = 4;
+        let mut ans = vm.jump_back(i);
+        assert_eq!(ans, Ok(1));
+        // Return an error when can't find matching bracket
+        vm.instruction_pointer = 1;
+        ans = vm.jump_back(i);
+        assert_eq!(
+            ans,
+            Err(VMError::CantFindBracket {
+                error_description: "Can't find matching '[' bracket",
+                bad_instruction: i
+            })
+        );
+        ////////////////////
+        // Zero data bit, don't jump
+        vm.tape[vm.data_pointer] = 0;
+        vm.instruction_pointer = 4;
+        ans = vm.jump_back(i);
+        assert_eq!(ans, Ok(5));
+    }
+
+    #[test]
+
+    // Check counting ok for backwards searching
+    fn jump_back_catch_all() {
+        println!("JUMP BACK CATCH ALL");
+        let p = BFProgram::new("TestFile", "[[[[[[[[[[[".to_string());
+        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
+        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        /////////////////////
+        // Nonzero data bit, do jumps
+        //
+        vm.instruction_pointer = 4;
+        // Correctly move instruction pointer one to the left
+        vm.tape[vm.data_pointer] = 100;
+        let ans = vm.jump_back(i);
+        assert_eq!(ans, Ok(3));
     }
 }
