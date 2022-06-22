@@ -36,9 +36,9 @@ where
     can_grow: bool,
 }
 
-#[derive(Error, Debug, cmp::PartialEq)]
+#[derive(Error, Debug, cmp::PartialEq, Clone, Copy)]
 /// Enum for VM errors
-pub enum VMError<'a, 'b> {
+pub enum VMError {
     #[error(
         "Invalid head position: {}, bad instruction: {}",
         error_description,
@@ -47,9 +47,9 @@ pub enum VMError<'a, 'b> {
     /// Bad bracket error type
     InvalidHead {
         /// Error description
-        error_description: &'a str,
+        error_description: &'static str,
         /// Instruction causing error
-        bad_instruction: &'b InputInstruction,
+        bad_instruction: InputInstruction,
     },
     #[error(
         "Invalid head position: {}, bad instruction: {}",
@@ -59,25 +59,25 @@ pub enum VMError<'a, 'b> {
     /// Oversize/negative error type
     InvalidData {
         /// Error description
-        error_description: &'a str,
+        error_description: &'static str,
         /// Instruction causing error
-        bad_instruction: &'b InputInstruction,
+        bad_instruction: InputInstruction,
     },
     #[error("I/O error, bad instruction: {}", bad_instruction)]
     /// I/O errors from reader/writer functionality
     IOError {
         /// Eror desscription
-        error_desciption: &'a str,
+        error_desciption: &'static str,
         /// Instruction causing error
-        bad_instruction: &'b InputInstruction,
+        bad_instruction: InputInstruction,
     },
     #[error("Can't find matching bracket, bad instruction {}", bad_instruction)]
     /// Bracket error not picked up by matching
     CantFindBracket {
         /// Error description
-        error_description: &'a str,
+        error_description: &'static str,
         /// Instructin causing error
-        bad_instruction: &'b InputInstruction,
+        bad_instruction: InputInstruction,
     },
 }
 
@@ -224,47 +224,39 @@ impl<
         }
     }
 
-    /// Interpret the instructions at some given path.
-    /// Currently just prints their content.
-    pub fn interpret(&self, prog: &BFProgram<P>) {
-        // "instructions" are private data, needed a getter method
-        for i in prog.instructions() {
-            println!("{}", i);
-        }
-    }
     // Actions corresponding to input instructions.
     // All these functions return the next instruction pointer to use
     /// Move head left.
-    pub fn move_head_left(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn move_head_left(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         if self.data_pointer == 0 {
             return Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
-                bad_instruction: i,
+                bad_instruction: *i,
             });
         }
         self.data_pointer -= 1;
         Ok(self.instruction_pointer + 1)
     }
     /// Move head right
-    pub fn move_head_right(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn move_head_right(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         if self.data_pointer == self.num_cells - 1 {
             return Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
-                bad_instruction: i,
+                bad_instruction: *i,
             });
         }
         self.data_pointer += 1;
         Ok(self.instruction_pointer + 1)
     }
     /// Increment value at a particular position, returning an error if value is too high
-    pub fn increment_value(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn increment_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         let new_value = self.tape[self.data_pointer].inc_value();
         // If returns error, then test
         match new_value {
             Err(_e) => {
                 return Err(VMError::InvalidData {
                     error_description: "Value too large for data type",
-                    bad_instruction: i,
+                    bad_instruction: *i,
                 });
             }
             Ok(ans) => {
@@ -274,13 +266,13 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
-    pub fn decrement_value(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn decrement_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         let new_value = self.tape[self.data_pointer].sub_value();
         match new_value {
             Err(_e) => {
                 return Err(VMError::InvalidData {
                     error_description: "Value cannot be smaller than zero",
-                    bad_instruction: i,
+                    bad_instruction: *i,
                 });
             }
             Ok(ans) => {
@@ -292,7 +284,7 @@ impl<
     /// Read byte from reader into data head's cell (ie "," command)
     pub fn read_byte(
         &mut self,
-        i: &'a InputInstruction,
+        i: &InputInstruction,
         reader: &mut dyn Read,
     ) -> Result<usize, VMError> {
         let mut buff = [0; 1];
@@ -306,7 +298,7 @@ impl<
                 // println!("IO ERROR");
                 Err(VMError::IOError {
                     error_desciption: "Error reading data byte",
-                    bad_instruction: i,
+                    bad_instruction: *i,
                 })
             }
         }
@@ -314,7 +306,7 @@ impl<
     /// Output data byte
     pub fn out_byte(
         &mut self,
-        i: &'a InputInstruction,
+        i: &InputInstruction,
         writer: &mut dyn Write,
     ) -> Result<usize, VMError> {
         // Stores first byte of cell's value.
@@ -325,15 +317,15 @@ impl<
         if let Err(_e) = writer.write(&buff) {
             return Err(VMError::IOError {
                 error_desciption: "Error reading data byte",
-                bad_instruction: i,
+                bad_instruction: *i,
             });
         };
         Ok(self.instruction_pointer + 1)
     }
     /// Unconditionally jump program counter forward to matching "]" instruction.
-    pub fn jump_forward(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn jump_forward(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "]".
-        let pos_next_jump_back = self
+        let pos_next_jump_back = &self
             .prog
             .instructions()
             .iter()
@@ -345,13 +337,13 @@ impl<
             Some(pos) => Ok(pos + self.instruction_pointer + 1),
             None => Err(VMError::CantFindBracket {
                 error_description: "Can't find matching ']' bracket",
-                bad_instruction: i,
+                bad_instruction: *i,
             }),
         }
     }
     /// Conditionally jump program counter forward to matching "[" instruction.
     /// Condition: byte at data pointer *not* zero.
-    pub fn jump_back(&mut self, i: &'a InputInstruction) -> Result<usize, VMError> {
+    pub fn jump_back(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "[".
         if !self.tape[self.data_pointer].is_zero() {
             let num_instructions = self.prog.instructions().len();
@@ -372,12 +364,47 @@ impl<
                 }
                 None => Err(VMError::CantFindBracket {
                     error_description: "Can't find matching '[' bracket",
-                    bad_instruction: i,
+                    bad_instruction: *i,
                 }),
             }
         } else {
             Ok(self.instruction_pointer() + 1)
         }
+    }
+    /// Interpret the instructions at some given path.
+    /// Currently just prints their content.
+    pub fn interpret<R, W>(&mut self, input: &mut R, output: &mut W) -> Result<(), VMError>
+    where
+        R: Read,
+        W: Write,
+    {
+        while self.instruction_pointer < self.prog.instructions.len() {
+            let i = self.prog.instructions[self.instruction_pointer];
+            let mut e: Result<usize, VMError> = Err(VMError::IOError {
+                error_desciption: "Couldn't convert instruction to operation",
+                bad_instruction: i,
+            });
+            match i.instruction() {
+                RawInstruction::PointerInc => e = self.move_head_right(&i),
+                RawInstruction::PointerDec => e = self.move_head_left(&i),
+                RawInstruction::ByteInc => e = self.increment_value(&i),
+                RawInstruction::ByteDec => e = self.decrement_value(&i),
+                RawInstruction::ReadByte => e = self.read_byte(&i, input),
+                RawInstruction::OutByte => e = self.out_byte(&i, output),
+                RawInstruction::JumpForward => e = self.jump_forward(&i),
+                RawInstruction::JumpBack => e = self.jump_back(&i),
+                _ => (),
+            }
+            {
+                match e {
+                    Ok(pos_future) => self.instruction_pointer = pos_future,
+                    Err(e) => {
+                        return Err(e);
+                    }
+                }
+            }
+        }
+        Ok(())
     }
 }
 
@@ -413,7 +440,7 @@ mod tests {
             ans,
             Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
-                bad_instruction: i
+                bad_instruction: *i,
             })
         );
     }
@@ -434,7 +461,7 @@ mod tests {
             ans,
             Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
-                bad_instruction: i
+                bad_instruction: *i
             })
         );
     }
@@ -482,7 +509,7 @@ mod tests {
             ans,
             Err(VMError::InvalidData {
                 error_description: "Value too large for data type",
-                bad_instruction: i
+                bad_instruction: *i
             })
         );
     }
@@ -502,7 +529,7 @@ mod tests {
             ans,
             Err(VMError::InvalidData {
                 error_description: "Value cannot be smaller than zero",
-                bad_instruction: i
+                bad_instruction: *i
             })
         );
     }
@@ -563,7 +590,7 @@ mod tests {
             ans,
             Err(VMError::CantFindBracket {
                 error_description: "Can't find matching ']' bracket",
-                bad_instruction: i
+                bad_instruction: *i
             })
         );
     }
@@ -590,7 +617,7 @@ mod tests {
             ans,
             Err(VMError::CantFindBracket {
                 error_description: "Can't find matching '[' bracket",
-                bad_instruction: i
+                bad_instruction: *i
             })
         );
         ////////////////////

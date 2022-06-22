@@ -87,7 +87,7 @@ pub enum BFError {
 }
 
 /// Represent an input instruction, inc. line and col numbers
-#[derive(Debug, std::cmp::PartialEq)]
+#[derive(Debug, std::cmp::PartialEq, Clone, Copy)]
 pub struct InputInstruction {
     instruction: RawInstruction,
     line_num: usize,
@@ -128,7 +128,8 @@ impl fmt::Display for InputInstruction {
 pub struct BFProgram<P: AsRef<Path>> {
     // Why do I get a warning here?
     file_name: P,
-    instructions: Vec<InputInstruction>,
+    /// Program's instructions.
+    pub instructions: Vec<InputInstruction>,
 }
 
 impl<P: AsRef<Path>> BFProgram<P> {
@@ -149,7 +150,7 @@ impl<P: AsRef<Path>> BFProgram<P> {
         let mut stack: Vec<RawInstruction> = Vec::new();
         let mut line_last_open = 0;
         let mut col_last_open = 0;
-        for i in self.instructions() {
+        for i in &self.instructions {
             let raw = i.instruction;
             match raw {
                 RawInstruction::JumpForward => {
