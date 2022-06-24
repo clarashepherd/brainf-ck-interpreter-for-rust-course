@@ -9,3 +9,6 @@ edition = "2021"
 bft_types = { path = "../bft_types" }
 num-traits = {version = "*"}
 thiserror = "1.0.31"
+
+[dev-dependencies]
+assert_fs = "1.0"

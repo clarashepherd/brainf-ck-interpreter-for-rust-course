@@ -12,6 +12,11 @@ bft_types = { path = "bft_types" }
 bft_interp = { path = "bft_interp" }
 
 
+[dev-dependencies]
+assert_cmd = "2.0"
+assert_fs = "1.0"
+
+
 [workspace]
 members = [
     "bft_interp",

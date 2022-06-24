@@ -203,7 +203,7 @@ impl<
         self.instruction_pointer
     }
     /// Get value at data head
-    pub fn head_value(&mut self) -> &T {
+    fn head_value(&mut self) -> &T {
         &mut self.tape[self.data_pointer]
     }
     /// Create new VM with some size, can choose whether to grow.
@@ -227,7 +227,7 @@ impl<
     // Actions corresponding to input instructions.
     // All these functions return the next instruction pointer to use
     /// Move head left.
-    pub fn move_head_left(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn move_head_left(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         if self.data_pointer == 0 {
             return Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
@@ -249,7 +249,7 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Increment value at a particular position, returning an error if value is too high
-    pub fn increment_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn increment_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         let new_value = self.tape[self.data_pointer].inc_value();
         // If returns error, then test
         match new_value {
@@ -266,7 +266,7 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
-    pub fn decrement_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn decrement_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         let new_value = self.tape[self.data_pointer].sub_value();
         match new_value {
             Err(_e) => {
@@ -282,11 +282,7 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Read byte from reader into data head's cell (ie "," command)
-    pub fn read_byte(
-        &mut self,
-        i: &InputInstruction,
-        reader: &mut dyn Read,
-    ) -> Result<usize, VMError> {
+    fn read_byte(&mut self, i: &InputInstruction, reader: &mut dyn Read) -> Result<usize, VMError> {
         let mut buff = [0; 1];
         match reader.read_exact(&mut buff) {
             Ok(()) => {
@@ -304,11 +300,7 @@ impl<
         }
     }
     /// Output data byte
-    pub fn out_byte(
-        &mut self,
-        i: &InputInstruction,
-        writer: &mut dyn Write,
-    ) -> Result<usize, VMError> {
+    fn out_byte(&mut self, i: &InputInstruction, writer: &mut dyn Write) -> Result<usize, VMError> {
         // Stores first byte of cell's value.
         // But needs to be as large as largest number type, for conversion.
         let mut buff = [0; 1];
@@ -323,7 +315,7 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Unconditionally jump program counter forward to matching "]" instruction.
-    pub fn jump_forward(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn jump_forward(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "]".
         let pos_next_jump_back = &self
             .prog
@@ -343,7 +335,7 @@ impl<
     }
     /// Conditionally jump program counter forward to matching "[" instruction.
     /// Condition: byte at data pointer *not* zero.
-    pub fn jump_back(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn jump_back(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "[".
         if !self.tape[self.data_pointer].is_zero() {
             let num_instructions = self.prog.instructions().len();
@@ -359,8 +351,9 @@ impl<
             // Don't expect any errors here: should have caught in bracket matching.
             match pos_next_jump_forward {
                 Some(pos) => {
-                    println!("Number of extra RHS iterations: {}", pos);
-                    Ok(self.instruction_pointer - pos - 1)
+                    //println!("Number of extra RHS iterations: {}", pos);
+                    // Position of matching "[" *plus one*
+                    Ok(self.instruction_pointer - pos)
                 }
                 None => Err(VMError::CantFindBracket {
                     error_description: "Can't find matching '[' bracket",
@@ -379,6 +372,8 @@ impl<
         W: Write,
     {
         while self.instruction_pointer < self.prog.instructions.len() {
+            //println!("Instruction pointer: {}", self.instruction_pointer());
+            //println!("Data pointer: {}", self.data_pointer());
             let i = self.prog.instructions[self.instruction_pointer];
             let mut e: Result<usize, VMError> = Err(VMError::IOError {
                 error_desciption: "Couldn't convert instruction to operation",
@@ -418,15 +413,9 @@ mod tests {
     use crate::BFProgram;
     //use crate::FirstByte;
     use crate::VM;
+    use assert_fs::prelude::*;
+    use core::str;
     use std::io::Cursor;
-
-    /*#[test]
-    fn test_interpret() {
-        // Not really a test. Just for debugging with "-- --nocapture"
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let vm: VM<u8, &str> = VM::new(&p, 0, false);
-        vm.interpret(vm.prog);
-    }*/
 
     #[test]
     /// Check for failure when pointer goes too far left
@@ -597,7 +586,6 @@ mod tests {
     #[test]
     /// Test conditional jump to "]"
     fn jump_back_ok_fail() {
-        println!("JUMP BACK TEST");
         let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
         let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
@@ -609,7 +597,7 @@ mod tests {
         vm.tape[vm.data_pointer] = 100;
         vm.instruction_pointer = 4;
         let mut ans = vm.jump_back(i);
-        assert_eq!(ans, Ok(1));
+        assert_eq!(ans, Ok(2));
         // Return an error when can't find matching bracket
         vm.instruction_pointer = 1;
         ans = vm.jump_back(i);
@@ -632,7 +620,6 @@ mod tests {
 
     // Check counting ok for backwards searching
     fn jump_back_catch_all() {
-        println!("JUMP BACK CATCH ALL");
         let p = BFProgram::new("TestFile", "[[[[[[[[[[[".to_string());
         let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
@@ -643,6 +630,40 @@ mod tests {
         // Correctly move instruction pointer one to the left
         vm.tape[vm.data_pointer] = 100;
         let ans = vm.jump_back(i);
-        assert_eq!(ans, Ok(3));
+        assert_eq!(ans, Ok(4));
     }
+
+    #[test]
+    /// Check that interpret function correctly gives hello_world message,
+    /// TODO only operator not tested is ","
+    fn test_hello_world() -> Result<(), Box<dyn std::error::Error>> {
+        // Spoof file, reader, writer
+        let temp_file = assert_fs::NamedTempFile::new("helloWorld.txt")?;
+        temp_file.write_str(
+            ">++++++++[<+++++++++>-]<.>++++[<+++++++>-]<+.+++++++..+++.>>++++++[<+++++++>-]<+
+        +.------------.>++++++[<+++++++++>-]<+.<.+++.------.--------.>>>++++[<++++++++>-
+        ]<+.",
+        )?;
+        let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![0; 20]);
+        let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![0; 20]);
+        // Read program and interpret
+        // println!("{:?}", temp_file.path());
+        let program = bft_types::BFProgram::from_file(temp_file.path()).unwrap();
+        let mut vm: VM<u8, &std::path::Path> = VM::new(&program, 10, false);
+        let _ans = vm.interpret(&mut spoofed_reader, &mut spoofed_writer);
+        for cell_value in vm.tape() {
+            print!("{}\n", cell_value);
+        }
+        let message_bits: Vec<u8> = spoofed_writer
+            .into_inner()
+            .into_iter()
+            .filter(|x| *x != 0)
+            .collect();
+        println!("{:?}", message_bits);
+        let message = std::str::from_utf8(&message_bits).unwrap();
+        assert_eq!(message, "Hello, World!");
+        Ok(())
+    }
+    // TODO test ",": read 3rd element of reader to 2nd tape  cell
+    // TODO integration tests in own file:
 }
