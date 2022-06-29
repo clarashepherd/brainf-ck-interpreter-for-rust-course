@@ -660,6 +660,20 @@ mod tests {
         assert_eq!(message, "Hello, World!");
         Ok(())
     }
-    // TODO test ",": read 3rd element of reader to 2nd tape  cell
-    // TODO integration tests in own file:
+
+    #[test]
+    /// Check that interpret function correctly reads a data byte,
+    fn test_read_byte() -> Result<(), Box<dyn std::error::Error>> {
+        // Spoof file, reader, writer
+        let temp_file = assert_fs::NamedTempFile::new("outputTwo.txt")?;
+        temp_file.write_str(",")?;
+        let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![10; 5]);
+        let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![0; 5]);
+        // Read program and interpret
+        let program = bft_types::BFProgram::from_file(temp_file.path()).unwrap();
+        let mut vm: VM<u8, &std::path::Path> = VM::new(&program, 5, false);
+        let _ans = vm.interpret(&mut spoofed_reader, &mut spoofed_writer);
+        assert_eq!(vm.tape, [10, 0, 0, 0, 0]);
+        Ok(())
+    }
 }
