@@ -647,13 +647,9 @@ mod tests {
         let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![0; 20]);
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![0; 20]);
         // Read program and interpret
-        // println!("{:?}", temp_file.path());
         let program = bft_types::BFProgram::from_file(temp_file.path()).unwrap();
         let mut vm: VM<u8, &std::path::Path> = VM::new(&program, 10, false);
         let _ans = vm.interpret(&mut spoofed_reader, &mut spoofed_writer);
-        for cell_value in vm.tape() {
-            print!("{}\n", cell_value);
-        }
         let message_bits: Vec<u8> = spoofed_writer
             .into_inner()
             .into_iter()
