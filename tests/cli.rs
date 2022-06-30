@@ -16,7 +16,7 @@ fn hello_world_ok() -> Result<(), Box<dyn std::error::Error>> {
     // Run binary
     let mut cmd = Command::cargo_bin("bft")?;
     cmd.arg(temp_file.path());
-    cmd.assert().success().stdout("Hello, World!");
+    cmd.assert().success().stdout("Hello, World!\n");
     Ok(())
 }
 

@@ -3,13 +3,13 @@
 //! Main program
 use std::{path, process};
 
-use bft_interp::VM;
+use bft_interp::{ContainsWriter, VM};
 use bft_types::BFProgram;
 
 mod cli;
 use clap::Parser;
 use cli::Options;
-use std::io::{self, stdin, stdout, Read, Write};
+use std::io::{self, stdin, stdout, Write};
 
 /// Run the interpreter, accepting CLI options
 fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
@@ -18,9 +18,13 @@ fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
     let mut vm: VM<u8, &path::PathBuf> = VM::new(&program, 0, false);
 
     let mut output: Box<dyn Write> = Box::new(stdout());
+    let mut wrapped_output = ContainsWriter {
+        writer: output,
+        last_character_newline: false,
+    };
     let mut input = stdin();
 
-    let ans = vm.interpret(&mut input, &mut output);
+    let ans = vm.interpret(&mut input, &mut wrapped_output);
     if let Err(e) = ans {
         return Err(Box::new(e));
     }

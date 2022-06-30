@@ -7,9 +7,56 @@ use bft_types::{BFProgram, InputInstruction};
 use std::clone;
 use std::cmp;
 use std::convert;
-use std::io::{Read, Write};
+use std::io::{self, stdin, stdout, Read, Write};
 use std::path::Path;
 use thiserror::Error;
+
+pub struct ContainsWriter<W: Write> {
+    pub writer: W,
+    pub last_character_newline: bool,
+}
+
+impl<W> Write for ContainsWriter<W>
+where
+    W: Write,
+{
+    fn write(&mut self, buf: &[u8]) -> io::Result<usize> {
+        //println!("Got here");
+        let ans = Write::write(&mut self.writer, buf);
+        if let Ok(num_bytes) = ans {
+            //println!("last read character was: {}", buf[num_bytes - 1]);
+            if buf[num_bytes - 1] == b'\n' {
+                // last chracter was newline
+                //println!("last char was newline");
+                self.last_character_newline = true;
+            } else {
+                //println!("last char was not newline");
+                self.last_character_newline = false;
+            }
+        }
+        ans
+    }
+    fn flush(&mut self) -> io::Result<()> {
+        Write::flush(&mut self.writer)
+    }
+}
+
+impl<W> Drop for ContainsWriter<W>
+where
+    W: Write,
+{
+    fn drop(&mut self) {
+        if !self.last_character_newline {
+            // last character was not newline, add one
+            if let Err(e) = Write::write(&mut self.writer, &[b'\n']) {
+                println!("An error occurred while trying to write final newline");
+            }
+            // last character was newline, no extra needed
+        } else {
+            // doesn't need newline
+        }
+    }
+}
 
 /// Represents virtual machine: tape with some number of cells, each of some type.
 /// Includes option to dynamically grow tape.
