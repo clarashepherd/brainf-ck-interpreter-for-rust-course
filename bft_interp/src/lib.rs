@@ -51,9 +51,6 @@ where
             if let Err(e) = Write::write(&mut self.writer, &[b'\n']) {
                 println!("An error occurred while trying to write final newline");
             }
-            // last character was newline, no extra needed
-        } else {
-            // doesn't need newline
         }
     }
 }
@@ -459,10 +456,11 @@ mod tests {
 
     use crate::BFProgram;
     //use crate::FirstByte;
+    use crate::ContainsWriter;
     use crate::VM;
     use assert_fs::prelude::*;
     use core::str;
-    use std::io::Cursor;
+    use std::io::{Cursor, Write};
 
     #[test]
     /// Check for failure when pointer goes too far left
@@ -723,4 +721,41 @@ mod tests {
         assert_eq!(vm.tape, [10, 0, 0, 0, 0]);
         Ok(())
     }
+
+    #[test]
+    /// Check rapped writer, no newline added if there's one already
+    fn reader_already_newline() -> Result<(), Box<dyn std::error::Error>> {
+        let output = Cursor::new(vec![0; 5]);
+        let mut wrapped = ContainsWriter {
+            writer: output,
+            last_character_newline: false,
+        };
+        wrapped.write(&[1, 2, b'\n']).ok();
+        wrapped.flush()?;
+        let mut rhs = Cursor::new(vec![1, 2, b'\n', 0, 0]);
+        rhs.set_position(3);
+        assert_eq!(wrapped.writer, rhs);
+        Ok(())
+    }
+    /* TODO can't test drop here w/o stdout shenanigans
+    // Already tested that way in tests/cli.rs
+    // Any suggestions for how I could also test here?
+    #[test]
+    /// Check wrapped writer, no newline added if there's one already
+    fn reader_needs_newline() -> Result<(), Box<dyn std::error::Error>> {
+        let output = Cursor::new(vec![0; 5]);
+        let mut wrapped = ContainsWriter {
+            writer: output,
+            last_character_newline: false,
+        };
+        wrapped.write(&[1, 2, b'\n']).ok();
+        // extra write, not newline
+        wrapped.write(&[4]).ok();
+        wrapped.flush()?;
+        drop(wrapped);
+        let mut rhs = Cursor::new(vec![1, 2, b'\n', 4, b'\n']);
+        rhs.set_position(5);
+        assert_eq!(wrapped.writer, rhs);
+        Ok(())
+    }*/
 }
