@@ -2,9 +2,14 @@
 //!
 //!
 //! Contains a struct for a BF program, and methods to read instructions from a file.
+// TODO ask about:
+// * conventions for 'use':
+//   * combine as much as possible?
+//   * include as little as possible?
+//   * avoid 'use' entire trait name?
 #![warn(missing_docs)]
 
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::{fmt, fs};
 use thiserror::Error;
 
@@ -48,8 +53,7 @@ impl RawInstruction {
 }
 
 impl fmt::Display for RawInstruction {
-    /// Print interpretation of instruction.
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             RawInstruction::PointerDec => write!(f, "Decrement data pointer"),
             RawInstruction::PointerInc => write!(f, "Increment data pointer"),
@@ -74,7 +78,12 @@ impl fmt::Display for RawInstruction {
 #[derive(Error, Debug, PartialEq)]
 /// Enum for program errors
 pub enum BFError {
-    #[error("Bracket not closed. Type is {}", bad_bracket)]
+    #[error(
+        "Bracket not closed. Type is {}, line {}, col {}",
+        bad_bracket,
+        bad_line,
+        bad_col
+    )]
     /// Bad bracket error type
     BracketError {
         /// Bad bracket: "[" or "]"
@@ -87,7 +96,7 @@ pub enum BFError {
 }
 
 /// Represent an input instruction, inc. line and col numbers
-#[derive(Debug, std::cmp::PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone, Copy)]
 pub struct InputInstruction {
     instruction: RawInstruction,
     line_num: usize,
@@ -125,19 +134,18 @@ impl fmt::Display for InputInstruction {
 ///
 // Accepts a generic type: anything which can be implicitly converted to
 // a reference to a path.
-pub struct BFProgram<P: AsRef<Path>> {
-    // Why do I get a warning here?
-    file_name: P,
+pub struct BFProgram {
+    file_name: PathBuf,
     /// Program's instructions.
     pub instructions: Vec<InputInstruction>,
 }
 
-impl<P: AsRef<Path>> BFProgram<P> {
-    /// Getter function for file name
-    pub fn file_name(&self) -> &P {
+impl BFProgram {
+    /// Getter for file name, only to shut clippy up
+    /// TODO what can I change to not need this?
+    pub fn file_name(&self) -> &PathBuf {
         &self.file_name
     }
-
     /// Getter function for (private) instructions
     pub fn instructions(&self) -> &Vec<InputInstruction> {
         &self.instructions
@@ -185,7 +193,7 @@ impl<P: AsRef<Path>> BFProgram<P> {
 
     // implicitly converted into a ref to a path
     /// Create a new BF program from a file and its contents
-    pub fn new(file_name: P, content: String) -> Self {
+    pub fn new<P: AsRef<Path>>(file_name: P, content: String) -> Self {
         let mut instructions = Vec::new();
         let mut line_count = 1;
         for line in content.lines() {
@@ -202,7 +210,7 @@ impl<P: AsRef<Path>> BFProgram<P> {
             line_count += 1;
         }
         Self {
-            file_name,
+            file_name: file_name.as_ref().to_path_buf(),
             instructions,
         }
     }
@@ -215,7 +223,9 @@ impl<P: AsRef<Path>> BFProgram<P> {
     /// use bft_types::BFProgram;
     /// let prog = BFProgram::from_file("example_commands");
     /// ```
-    pub fn from_file(file_name: P) -> Result<BFProgram<P>, Box<dyn std::error::Error>> {
+    pub fn from_file<P: AsRef<Path>>(
+        file_name: P,
+    ) -> Result<BFProgram, Box<dyn std::error::Error>> {
         let f = file_name.as_ref();
         let content = fs::read_to_string(f)?;
         let prog = BFProgram::new(file_name, content);

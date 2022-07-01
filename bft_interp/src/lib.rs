@@ -4,12 +4,10 @@
 
 use bft_types::RawInstruction;
 use bft_types::{BFProgram, InputInstruction};
-use core::num;
 use std::clone;
 use std::cmp;
 use std::convert;
-use std::io::{self, stdin, stdout, Read, Write};
-use std::path::Path;
+use std::io::{self, Read, Write};
 use thiserror::Error;
 
 /// TODO doc
@@ -28,7 +26,6 @@ where
         //println!("Got here");
         let ans = Write::write(&mut self.writer, buf);
         if let Ok(num_bytes) = ans {
-            //println!("last read character was: {}", buf[num_bytes - 1]);
             if buf[num_bytes - 1] == b'\n' {
                 // last chracter was newline
                 //println!("last char was newline");
@@ -52,7 +49,7 @@ where
     fn drop(&mut self) {
         if !self.last_character_newline {
             // last character was not newline, add one
-            if let Err(e) = Write::write(&mut self.writer, &[b'\n']) {
+            if let Err(_e) = Write::write(&mut self.writer, &[b'\n']) {
                 println!("An error occurred while trying to write final newline");
             }
         }
@@ -64,14 +61,13 @@ where
 // TODO how to make this lifetime compatible with that of VM?
 // I can't currently let VMError return a *reference* to an instruction
 #[derive(Clone)]
-pub struct VM<'a, T, P>
+pub struct VM<'a, T>
 where
     // Satisfies base trait for numeric types, and clone
     T: CellKind,
-    P: AsRef<Path>,
 {
     /// Borrow of program TOOD why
-    prog: &'a BFProgram<P>,
+    prog: &'a BFProgram,
     /// Number of cells
     num_cells: usize,
     /// Location of data pointer's head
@@ -175,21 +171,19 @@ impl FirstByte for u16 {
 }
 
 // Note: T: ... syntax equivalent to a 'where'
-impl<
-        'a,
-        T: num_traits::Num
-            + num_traits::Zero
-            + clone::Clone
-            + CellKind
-            + std::default::Default
-            + convert::From<u8>
-            + FirstByte,
-        P: AsRef<Path>,
-    > VM<'a, T, P>
+impl<'a, T> VM<'a, T>
+where
+    T: num_traits::Num
+        + num_traits::Zero
+        + clone::Clone
+        + CellKind
+        + std::default::Default
+        + convert::From<u8>
+        + FirstByte,
 {
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
-    pub fn new(prog: &'a BFProgram<P>, size: usize, is_auto_extending: bool) -> Self {
+    pub fn new(prog: &'a BFProgram, size: usize, is_auto_extending: bool) -> Self {
         let mut num_cells = 30000;
         if size != 0 {
             num_cells = size;
@@ -371,17 +365,15 @@ mod tests {
     use std::io::{Cursor, Write};
 
     // Useful function
-    impl<
-            'a,
-            T: num_traits::Num
-                + num_traits::Zero
-                + std::clone::Clone
-                + CellKind
-                + std::default::Default
-                + std::convert::From<u8>
-                + FirstByte,
-            P: AsRef<std::path::Path>,
-        > VM<'a, T, P>
+    impl<'a, T> VM<'a, T>
+    where
+        T: num_traits::Num
+            + num_traits::Zero
+            + std::clone::Clone
+            + CellKind
+            + std::default::Default
+            + std::convert::From<u8>
+            + FirstByte,
     {
         /// Get value at data head
         fn head_value(&mut self) -> T {
@@ -393,7 +385,7 @@ mod tests {
     /// Check for failure when pointer goes too far left
     fn pointer_left_fail() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
+        let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let ans = vm.move_head_left();
         assert_eq!(
@@ -409,7 +401,7 @@ mod tests {
     /// Check for failure when pointer goes too far
     fn pointer_right_fail() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
+        let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..vm.num_cells - 1 {
@@ -428,7 +420,7 @@ mod tests {
     #[test]
     fn pointer_right_left_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
+        let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..10 {
@@ -444,7 +436,7 @@ mod tests {
     #[test]
     fn move_pointer_tape_grows_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 1, true);
+        let mut vm: VM<u8> = VM::new(&p, 1, true);
         assert_eq!(vm.data_pointer, 0);
         // Create one extra cell
         let _ans = vm.move_head_right();
@@ -458,7 +450,7 @@ mod tests {
     /// Increase value of cell to beyond u8's max size
     fn data_inc_dec_ok_wrap_high() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
+        let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Increase to max size
@@ -482,7 +474,7 @@ mod tests {
     /// Try setting value of cell to less than zero
     fn data_dec_wrap_low() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u8> = VM::new(&p, 5, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
@@ -495,7 +487,7 @@ mod tests {
     /// Check works when VM's data type is *not u8.
     fn read_byte_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u16> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
         vm.read_byte(&mut spoofed_reader).unwrap();
@@ -510,7 +502,7 @@ mod tests {
     /// Check works when VM's data type is *not* u8.
     fn out_byte_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u16> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
         vm.out_byte(&mut spoofed_writer).unwrap();
@@ -524,7 +516,7 @@ mod tests {
     /// Test unconditonal jump to "]"
     fn jump_forward_ok_fail() {
         let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
-        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u16> = VM::new(&p, 5, false);
         // Spoof position of first "[".
         // Note: only valid instructions are counted, so the first "[" is at position 1, "]" at position 4.
         // Correctly find "]" position.
@@ -546,7 +538,7 @@ mod tests {
     /// Test conditional jump to "]"
     fn jump_back_ok_fail() {
         let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
-        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u16> = VM::new(&p, 5, false);
         /////////////////////
         // Nonzero data bit, do jumps
         //
@@ -579,7 +571,7 @@ mod tests {
     // Check counting ok for backwards searching
     fn jump_back_catch_all() {
         let p = BFProgram::new("TestFile", "[[[[[[[[[[[".to_string());
-        let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
+        let mut vm: VM<u16> = VM::new(&p, 5, false);
         /////////////////////
         // Nonzero data bit, do jumps
         //
@@ -605,7 +597,7 @@ mod tests {
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![0; 20]);
         // Read program and interpret
         let program = bft_types::BFProgram::from_file(temp_file.path()).unwrap();
-        let mut vm: VM<u8, &std::path::Path> = VM::new(&program, 10, false);
+        let mut vm: VM<u8> = VM::new(&program, 10, false);
         let _ans = vm.interpret(&mut spoofed_reader, &mut spoofed_writer);
         let message_bits: Vec<u8> = spoofed_writer
             .into_inner()
@@ -628,7 +620,7 @@ mod tests {
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![0; 5]);
         // Read program and interpret
         let program = bft_types::BFProgram::from_file(temp_file.path()).unwrap();
-        let mut vm: VM<u8, &std::path::Path> = VM::new(&program, 5, false);
+        let mut vm: VM<u8> = VM::new(&program, 5, false);
         let _ans = vm.interpret(&mut spoofed_reader, &mut spoofed_writer);
         assert_eq!(vm.tape, [10, 0, 0, 0, 0]);
         Ok(())

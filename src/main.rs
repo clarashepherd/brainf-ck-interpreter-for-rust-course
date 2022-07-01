@@ -1,7 +1,7 @@
 #![warn(missing_docs)]
 
 //! Main program
-use std::{path, process};
+use std::process;
 
 use bft_interp::{ContainsWriter, VM};
 use bft_types::BFProgram;
@@ -9,15 +9,15 @@ use bft_types::BFProgram;
 mod cli;
 use clap::Parser;
 use cli::Options;
-use std::io::{self, stdin, stdout, Write};
+use std::io::{stdin, stdout, Write};
 
 /// Run the interpreter, accepting CLI options
 fn run_bft(opt: &Options) -> Result<(), Box<dyn std::error::Error>> {
     let program = BFProgram::from_file(&opt.file_name)?;
     // TODO don't like how the path's type was automatically specified above, but had to be manually specified below. Is there a way to avoid this?
-    let mut vm: VM<u8, &path::PathBuf> = VM::new(&program, 0, false);
+    let mut vm: VM<u8> = VM::new(&program, 0, false);
 
-    let mut output: Box<dyn Write> = Box::new(stdout());
+    let output: Box<dyn Write> = Box::new(stdout());
     let mut wrapped_output = ContainsWriter {
         writer: output,
         last_character_newline: false,

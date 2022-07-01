@@ -40,7 +40,7 @@ fn mismatched_brackets() -> Result<(), Box<dyn std::error::Error>> {
     let mut cmd = Command::cargo_bin("bft")?;
     cmd.arg(temp_file.path());
     cmd.assert().failure().stderr(format!(
-        "Error in file \"{}\": Bracket not closed. Type is ]\n",
+        "Error in file \"{}\": Bracket not closed. Type is ], line 1, col 3\n",
         temp_file.path().display()
     ));
     Ok(())
