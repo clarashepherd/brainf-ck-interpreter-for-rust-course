@@ -147,7 +147,7 @@ impl BFProgram {
         &self.file_name
     }
     /// Getter function for (private) instructions
-    pub fn instructions(&self) -> &Vec<InputInstruction> {
+    pub fn instructions(&self) -> &[InputInstruction] {
         &self.instructions
     }
 

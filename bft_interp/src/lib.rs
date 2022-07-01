@@ -356,12 +356,10 @@ mod tests {
     use super::VMError;
 
     use crate::BFProgram;
-    //use crate::FirstByte;
     use crate::ContainsWriter;
     use crate::VM;
     use crate::{CellKind, FirstByte};
     use assert_fs::prelude::*;
-    use core::str;
     use std::io::{Cursor, Write};
 
     // Useful function
