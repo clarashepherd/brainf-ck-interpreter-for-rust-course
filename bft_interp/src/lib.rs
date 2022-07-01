@@ -4,6 +4,7 @@
 
 use bft_types::RawInstruction;
 use bft_types::{BFProgram, InputInstruction};
+use core::num;
 use std::clone;
 use std::cmp;
 use std::convert;
@@ -63,7 +64,7 @@ where
 pub struct VM<'a, T, P>
 where
     // Satisfies base trait for numeric types, and clone
-    T: num_traits::Num + num_traits::Zero + clone::Clone + convert::From<u8>,
+    T: CellKind,
     P: AsRef<Path>,
 {
     /// Borrow of program TOOD why
@@ -82,6 +83,9 @@ where
 
 #[derive(Error, Debug, cmp::PartialEq, Clone, Copy)]
 /// Enum for VM errors
+// Comment from Daniel: OK that bad_instruction isn't a reference:
+// don't want errors to be borrows, because propagating them becomes a tangle.
+// Also, expect them to be rare so overheads are quite low.
 pub enum VMError {
     #[error(
         "Invalid head position: {}, bad instruction: {}",
@@ -125,70 +129,30 @@ pub enum VMError {
     },
 }
 
-#[derive(Error, Debug)]
-/// Error returned when attempting to increase data pointer's value beyond tape size,
-/// or below zero
-pub enum TapeSizeError {
-    /// Too large
-    #[error("Value too large for tape's data type")]
-    TooLarge,
-    /// Too small
-    #[error("Value too small for tape's data type (ie negative if unsigned)")]
-    TooSmall,
-}
-
 /// CellKind trait
 /// Implements additon and subtraction
 /// If can't add/subtract any further, returns modulus
 /// e.g. 255+1 = 0
 pub trait CellKind {
     /// Increment value by one
-    fn inc_value(&self) -> Result<Self, TapeSizeError>
+    fn inc_value(&self) -> Self
     where
         Self: std::marker::Sized;
     /// Decrement value by one
-    fn sub_value(&self) -> Result<Self, TapeSizeError>
+    fn sub_value(&self) -> Self
     where
         Self: std::marker::Sized;
 }
 
-impl CellKind for u8 {
-    fn inc_value(&self) -> Result<Self, TapeSizeError> {
-        let ans = self.wrapping_add(1);
-        // Addition and subtraction is mod(u8::SIZE)
-        if &ans < self {
-            return Err(TapeSizeError::TooLarge);
-        }
-        Ok(ans)
+impl<T> CellKind for T
+where
+    T: num_traits::WrappingAdd + num_traits::WrappingSub + From<u8>,
+{
+    fn inc_value(&self) -> Self {
+        self.wrapping_add(&T::from(1 as u8))
     }
-    fn sub_value(&self) -> Result<Self, TapeSizeError> {
-        let ans = self.wrapping_sub(1);
-        // Addition and subtraction is mod(u8::SIZE)
-        if &ans > self {
-            return Err(TapeSizeError::TooSmall);
-        }
-        Ok(ans)
-    }
-}
-
-impl CellKind for u16 {
-    // TODO this was copied from above, only type changed.
-    // Is there a way to avoid this duplication?
-    fn inc_value(&self) -> Result<Self, TapeSizeError> {
-        let ans = self.wrapping_add(1);
-        // Addition and subtraction is mod(u16::SIZE)
-        if &ans < self {
-            return Err(TapeSizeError::TooLarge);
-        }
-        Ok(ans)
-    }
-    fn sub_value(&self) -> Result<Self, TapeSizeError> {
-        let ans = self.wrapping_sub(1);
-        // Addition and subtraction is mod(u8::SIZE)
-        if &ans > self {
-            return Err(TapeSizeError::TooSmall);
-        }
-        Ok(ans)
+    fn sub_value(&self) -> Self {
+        self.wrapping_sub(&T::from(1 as u8))
     }
 }
 
@@ -247,8 +211,8 @@ impl<
         self.instruction_pointer
     }
     /// Get value at data head
-    fn head_value(&mut self) -> &T {
-        &mut self.tape[self.data_pointer]
+    fn head_value(&mut self) -> T {
+        self.tape[self.data_pointer].clone()
     }
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
@@ -294,35 +258,13 @@ impl<
     }
     /// Increment value at a particular position, returning an error if value is too high
     fn increment_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
-        let new_value = self.tape[self.data_pointer].inc_value();
-        // If returns error, then test
-        match new_value {
-            Err(_e) => {
-                return Err(VMError::InvalidData {
-                    error_description: "Value too large for data type",
-                    bad_instruction: *i,
-                });
-            }
-            Ok(ans) => {
-                self.tape[self.data_pointer] = ans;
-            }
-        }
+        // Kind of bad naming here
+        self.tape[self.data_pointer] = self.tape[self.data_pointer].inc_value();
         Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
     fn decrement_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
-        let new_value = self.tape[self.data_pointer].sub_value();
-        match new_value {
-            Err(_e) => {
-                return Err(VMError::InvalidData {
-                    error_description: "Value cannot be smaller than zero",
-                    bad_instruction: *i,
-                });
-            }
-            Ok(ans) => {
-                self.tape[self.data_pointer] = ans;
-            }
-        }
+        self.tape[self.data_pointer] = self.tape[self.data_pointer].sub_value();
         Ok(self.instruction_pointer + 1)
     }
     /// Read byte from reader into data head's cell (ie "," command)
@@ -520,7 +462,7 @@ mod tests {
     #[test]
     /// Tape of u8 type.
     /// Increase value of cell to beyond u8's max size
-    fn data_inc_dec_ok_fail_high() {
+    fn data_inc_dec_ok_wrap_high() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
@@ -530,28 +472,22 @@ mod tests {
         for _n in 0..255 {
             let _ans = vm.increment_value(i);
         }
-        assert_eq!(vm.head_value(), &255);
+        assert_eq!(vm.head_value(), 255);
         // Decrease by one
         let _ans = vm.decrement_value(i);
-        assert_eq!(vm.head_value(), &254);
+        assert_eq!(vm.head_value(), 254);
         // Increase by one
         let _ans = vm.increment_value(i);
-        assert_eq!(vm.head_value(), &255);
+        assert_eq!(vm.head_value(), 255);
         // Increase past max size
         let ans = vm.increment_value(i);
-        assert_eq!(
-            ans,
-            Err(VMError::InvalidData {
-                error_description: "Value too large for data type",
-                bad_instruction: *i
-            })
-        );
+        assert_eq!(vm.head_value(), 0);
     }
 
     #[test]
     /// Tape of u8 type.
     /// Try setting value of cell to less than zero
-    fn data_dec_fail_low() {
+    fn data_dec_wrap_low() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
@@ -559,19 +495,8 @@ mod tests {
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
         let ans = vm.decrement_value(i);
-        assert_eq!(
-            ans,
-            Err(VMError::InvalidData {
-                error_description: "Value cannot be smaller than zero",
-                bad_instruction: *i
-            })
-        );
+        assert_eq!(vm.head_value(), u8::MAX);
     }
-    // Test read_byte
-    // Create VM with 2 cells, u8 type
-    // Initialise a reader using Cursor trait (why?)
-    // Read one byte into first cell
-    // Check first cell contains new byte, second unchanged
 
     #[test]
     /// Test read_byte from spoofed reader.
@@ -739,7 +664,7 @@ mod tests {
     }
     /* TODO can't test drop here w/o stdout shenanigans
     // Already tested that way in tests/cli.rs
-    // Any suggestions for how I could also test here?
+    // Any suggestions for how I could also test here, or should I drop it?
     #[test]
     /// Check wrapped writer, no newline added if there's one already
     fn reader_needs_newline() -> Result<(), Box<dyn std::error::Error>> {
