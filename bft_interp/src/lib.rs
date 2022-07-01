@@ -102,18 +102,6 @@ pub enum VMError {
         /// Instruction causing error
         bad_instruction: InputInstruction,
     },
-    #[error(
-        "Invalid head position: {}, bad instruction: {}",
-        error_description,
-        bad_instruction
-    )]
-    /// Oversize/negative error type
-    InvalidData {
-        /// Error description
-        error_description: &'static str,
-        /// Instruction causing error
-        bad_instruction: InputInstruction,
-    },
     #[error("I/O error, bad instruction: {}", bad_instruction)]
     /// I/O errors from reader/writer functionality
     IOError {
@@ -349,32 +337,19 @@ impl<
         W: Write,
     {
         while self.instruction_pointer < self.prog.instructions.len() {
-            //println!("Instruction pointer: {}", self.instruction_pointer());
-            //println!("Data pointer: {}", self.data_pointer());
             let i = self.prog.instructions[self.instruction_pointer];
-            let mut e: Result<usize, VMError> = Err(VMError::IOError {
-                error_desciption: "Couldn't convert instruction to operation",
-                bad_instruction: self.prog.instructions[self.instruction_pointer],
-            });
+            let ans: Result<usize, VMError>;
             match i.instruction() {
-                RawInstruction::PointerInc => e = self.move_head_right(),
-                RawInstruction::PointerDec => e = self.move_head_left(),
-                RawInstruction::ByteInc => e = self.increment_value(),
-                RawInstruction::ByteDec => e = self.decrement_value(),
-                RawInstruction::ReadByte => e = self.read_byte(input),
-                RawInstruction::OutByte => e = self.out_byte(output),
-                RawInstruction::JumpForward => e = self.jump_forward(),
-                RawInstruction::JumpBack => e = self.jump_back(),
-                _ => (),
+                RawInstruction::PointerInc => ans = self.move_head_right(),
+                RawInstruction::PointerDec => ans = self.move_head_left(),
+                RawInstruction::ByteInc => ans = self.increment_value(),
+                RawInstruction::ByteDec => ans = self.decrement_value(),
+                RawInstruction::ReadByte => ans = self.read_byte(input),
+                RawInstruction::OutByte => ans = self.out_byte(output),
+                RawInstruction::JumpForward => ans = self.jump_forward(),
+                RawInstruction::JumpBack => ans = self.jump_back(),
             }
-            {
-                match e {
-                    Ok(pos_future) => self.instruction_pointer = pos_future,
-                    Err(e) => {
-                        return Err(e);
-                    }
-                }
-            }
+            self.instruction_pointer = ans?;
         }
         Ok(())
     }
@@ -385,7 +360,6 @@ impl<
 mod tests {
 
     use super::VMError;
-    use bft_types::{InputInstruction, RawInstruction};
 
     use crate::BFProgram;
     //use crate::FirstByte;
@@ -499,7 +473,7 @@ mod tests {
         let _ans = vm.increment_value();
         assert_eq!(vm.head_value(), 255);
         // Increase past max size
-        let ans = vm.increment_value();
+        let _ans = vm.increment_value();
         assert_eq!(vm.head_value(), 0);
     }
 
@@ -512,7 +486,7 @@ mod tests {
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
-        let ans = vm.decrement_value();
+        let _ans = vm.decrement_value();
         assert_eq!(vm.head_value(), u8::MAX);
     }
 
