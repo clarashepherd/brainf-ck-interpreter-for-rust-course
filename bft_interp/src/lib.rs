@@ -220,40 +220,40 @@ impl<
     // Actions corresponding to input instructions.
     // All these functions return the next instruction pointer to use
     /// Move head left.
-    fn move_head_left(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn move_head_left(&mut self) -> Result<usize, VMError> {
         if self.data_pointer == 0 {
             return Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
-                bad_instruction: *i,
+                bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
         }
         self.data_pointer -= 1;
         Ok(self.instruction_pointer + 1)
     }
     /// Move head right
-    pub fn move_head_right(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    pub fn move_head_right(&mut self) -> Result<usize, VMError> {
         if self.data_pointer == self.num_cells - 1 {
             return Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
-                bad_instruction: *i,
+                bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
         }
         self.data_pointer += 1;
         Ok(self.instruction_pointer + 1)
     }
     /// Increment value at a particular position, returning an error if value is too high
-    fn increment_value(&mut self, _i: &InputInstruction) -> Result<usize, VMError> {
+    fn increment_value(&mut self) -> Result<usize, VMError> {
         // Kind of bad naming here
         self.tape[self.data_pointer] = self.tape[self.data_pointer].inc_value();
         Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
-    fn decrement_value(&mut self, _i: &InputInstruction) -> Result<usize, VMError> {
+    fn decrement_value(&mut self) -> Result<usize, VMError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].sub_value();
         Ok(self.instruction_pointer + 1)
     }
     /// Read byte from reader into data head's cell (ie "," command)
-    fn read_byte(&mut self, i: &InputInstruction, reader: &mut dyn Read) -> Result<usize, VMError> {
+    fn read_byte(&mut self, reader: &mut dyn Read) -> Result<usize, VMError> {
         let mut buff = [0; 1];
         match reader.read_exact(&mut buff) {
             Ok(()) => {
@@ -265,13 +265,13 @@ impl<
                 // println!("IO ERROR");
                 Err(VMError::IOError {
                     error_desciption: "Error reading data byte",
-                    bad_instruction: *i,
+                    bad_instruction: self.prog.instructions[self.instruction_pointer],
                 })
             }
         }
     }
     /// Output data byte
-    fn out_byte(&mut self, i: &InputInstruction, writer: &mut dyn Write) -> Result<usize, VMError> {
+    fn out_byte(&mut self, writer: &mut dyn Write) -> Result<usize, VMError> {
         // Stores first byte of cell's value.
         // But needs to be as large as largest number type, for conversion.
         let mut buff = [0; 1];
@@ -280,13 +280,13 @@ impl<
         if let Err(_e) = writer.write(&buff) {
             return Err(VMError::IOError {
                 error_desciption: "Error reading data byte",
-                bad_instruction: *i,
+                bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
         };
         Ok(self.instruction_pointer + 1)
     }
     /// Unconditionally jump program counter forward to matching "]" instruction.
-    fn jump_forward(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn jump_forward(&mut self) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "]".
         let pos_next_jump_back = &self
             .prog
@@ -300,13 +300,13 @@ impl<
             Some(pos) => Ok(pos + self.instruction_pointer + 1),
             None => Err(VMError::CantFindBracket {
                 error_description: "Can't find matching ']' bracket",
-                bad_instruction: *i,
+                bad_instruction: self.prog.instructions[self.instruction_pointer],
             }),
         }
     }
     /// Conditionally jump program counter forward to matching "[" instruction.
     /// Condition: byte at data pointer *not* zero.
-    fn jump_back(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn jump_back(&mut self) -> Result<usize, VMError> {
         // Search beyond current instruction pointer for next instruction corresponding to "[".
         if !self.tape[self.data_pointer].is_zero() {
             let num_instructions = self.prog.instructions().len();
@@ -328,7 +328,7 @@ impl<
                 }
                 None => Err(VMError::CantFindBracket {
                     error_description: "Can't find matching '[' bracket",
-                    bad_instruction: *i,
+                    bad_instruction: self.prog.instructions[self.instruction_pointer],
                 }),
             }
         } else {
@@ -348,17 +348,17 @@ impl<
             let i = self.prog.instructions[self.instruction_pointer];
             let mut e: Result<usize, VMError> = Err(VMError::IOError {
                 error_desciption: "Couldn't convert instruction to operation",
-                bad_instruction: i,
+                bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
             match i.instruction() {
-                RawInstruction::PointerInc => e = self.move_head_right(&i),
-                RawInstruction::PointerDec => e = self.move_head_left(&i),
-                RawInstruction::ByteInc => e = self.increment_value(&i),
-                RawInstruction::ByteDec => e = self.decrement_value(&i),
-                RawInstruction::ReadByte => e = self.read_byte(&i, input),
-                RawInstruction::OutByte => e = self.out_byte(&i, output),
-                RawInstruction::JumpForward => e = self.jump_forward(&i),
-                RawInstruction::JumpBack => e = self.jump_back(&i),
+                RawInstruction::PointerInc => e = self.move_head_right(),
+                RawInstruction::PointerDec => e = self.move_head_left(),
+                RawInstruction::ByteInc => e = self.increment_value(),
+                RawInstruction::ByteDec => e = self.decrement_value(),
+                RawInstruction::ReadByte => e = self.read_byte(input),
+                RawInstruction::OutByte => e = self.out_byte(output),
+                RawInstruction::JumpForward => e = self.jump_forward(),
+                RawInstruction::JumpBack => e = self.jump_back(),
                 _ => (),
             }
             {
@@ -413,15 +413,14 @@ mod tests {
     /// Check for failure when pointer goes too far left
     fn pointer_left_fail() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
-        let ans = vm.move_head_left(i);
+        let ans = vm.move_head_left();
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
                 error_description: "can't be below zero",
-                bad_instruction: *i,
+                bad_instruction: vm.prog.instructions[vm.instruction_pointer],
             })
         );
     }
@@ -430,19 +429,18 @@ mod tests {
     /// Check for failure when pointer goes too far
     fn pointer_right_fail() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..vm.num_cells - 1 {
-            _ans = vm.move_head_right(i);
+            _ans = vm.move_head_right();
         }
-        let ans = vm.move_head_right(i);
+        let ans = vm.move_head_right();
         assert_eq!(
             ans,
             Err(VMError::InvalidHead {
                 error_description: "can't exceed rightmost position",
-                bad_instruction: *i
+                bad_instruction: vm.prog.instructions[vm.instruction_pointer]
             })
         );
     }
@@ -450,16 +448,15 @@ mod tests {
     #[test]
     fn pointer_right_left_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
         for _n in 0..10 {
-            _ans = vm.move_head_right(i);
+            _ans = vm.move_head_right();
         }
         assert_eq!(vm.data_pointer, 10);
         for _n in 0..5 {
-            _ans = vm.move_head_left(i);
+            _ans = vm.move_head_left();
         }
         assert_eq!(vm.data_pointer, 5);
     }
@@ -469,23 +466,22 @@ mod tests {
     /// Increase value of cell to beyond u8's max size
     fn data_inc_dec_ok_wrap_high() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Increase to max size
         for _n in 0..255 {
-            let _ans = vm.increment_value(i);
+            let _ans = vm.increment_value();
         }
         assert_eq!(vm.head_value(), 255);
         // Decrease by one
-        let _ans = vm.decrement_value(i);
+        let _ans = vm.decrement_value();
         assert_eq!(vm.head_value(), 254);
         // Increase by one
-        let _ans = vm.increment_value(i);
+        let _ans = vm.increment_value();
         assert_eq!(vm.head_value(), 255);
         // Increase past max size
-        let ans = vm.increment_value(i);
+        let ans = vm.increment_value();
         assert_eq!(vm.head_value(), 0);
     }
 
@@ -494,12 +490,11 @@ mod tests {
     /// Try setting value of cell to less than zero
     fn data_dec_wrap_low() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
-        let ans = vm.decrement_value(i);
+        let ans = vm.decrement_value();
         assert_eq!(vm.head_value(), u8::MAX);
     }
 
@@ -508,11 +503,10 @@ mod tests {
     /// Check works when VM's data type is *not u8.
     fn read_byte_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
-        vm.read_byte(i, &mut spoofed_reader).unwrap();
+        vm.read_byte(&mut spoofed_reader).unwrap();
         // Reader should be unchanged
         assert_eq!(spoofed_reader.into_inner(), vec![11, 12, 13]);
         // Tape's first bit should be changed
@@ -524,11 +518,10 @@ mod tests {
     /// Check works when VM's data type is *not* u8.
     fn out_byte_ok() {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
-        let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
-        vm.out_byte(i, &mut spoofed_writer).unwrap();
+        vm.out_byte(&mut spoofed_writer).unwrap();
         // Tape's first bit should be unchanged
         assert_eq!(*vm.tape, vec![0, 0, 0, 0, 0]);
         // Writer's first bit should have changed
@@ -539,22 +532,21 @@ mod tests {
     /// Test unconditonal jump to "]"
     fn jump_forward_ok_fail() {
         let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
-        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
         // Spoof position of first "[".
         // Note: only valid instructions are counted, so the first "[" is at position 1, "]" at position 4.
         // Correctly find "]" position.
         vm.instruction_pointer = 1;
-        let mut ans = vm.jump_forward(i);
+        let mut ans = vm.jump_forward();
         assert_eq!(ans, Ok(4));
         // Return an error when can't find matching bracket.
         vm.instruction_pointer = 4;
-        ans = vm.jump_forward(i);
+        ans = vm.jump_forward();
         assert_eq!(
             ans,
             Err(VMError::CantFindBracket {
                 error_description: "Can't find matching ']' bracket",
-                bad_instruction: *i
+                bad_instruction: vm.prog.instructions[vm.instruction_pointer]
             })
         );
     }
@@ -562,7 +554,6 @@ mod tests {
     /// Test conditional jump to "]"
     fn jump_back_ok_fail() {
         let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string());
-        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
         /////////////////////
         // Nonzero data bit, do jumps
@@ -571,23 +562,23 @@ mod tests {
         // Correctly find "[" position"]
         vm.tape[vm.data_pointer] = 100;
         vm.instruction_pointer = 4;
-        let mut ans = vm.jump_back(i);
+        let mut ans = vm.jump_back();
         assert_eq!(ans, Ok(2));
         // Return an error when can't find matching bracket
         vm.instruction_pointer = 1;
-        ans = vm.jump_back(i);
+        ans = vm.jump_back();
         assert_eq!(
             ans,
             Err(VMError::CantFindBracket {
                 error_description: "Can't find matching '[' bracket",
-                bad_instruction: *i
+                bad_instruction: vm.prog.instructions[vm.instruction_pointer]
             })
         );
         ////////////////////
         // Zero data bit, don't jump
         vm.tape[vm.data_pointer] = 0;
         vm.instruction_pointer = 4;
-        ans = vm.jump_back(i);
+        ans = vm.jump_back();
         assert_eq!(ans, Ok(5));
     }
 
@@ -596,7 +587,6 @@ mod tests {
     // Check counting ok for backwards searching
     fn jump_back_catch_all() {
         let p = BFProgram::new("TestFile", "[[[[[[[[[[[".to_string());
-        let i = &InputInstruction::new(RawInstruction::JumpForward, 0, 0);
         let mut vm: VM<u16, &str> = VM::new(&p, 5, false);
         /////////////////////
         // Nonzero data bit, do jumps
@@ -604,7 +594,7 @@ mod tests {
         vm.instruction_pointer = 4;
         // Correctly move instruction pointer one to the left
         vm.tape[vm.data_pointer] = 100;
-        let ans = vm.jump_back(i);
+        let ans = vm.jump_back();
         assert_eq!(ans, Ok(4));
     }
 
