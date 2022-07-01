@@ -81,7 +81,7 @@ where
     /// Tape
     tape: Vec<T>,
     /// Is tape allowed to dynamically grow?
-    can_grow: bool,
+    is_auto_extending: bool,
 }
 
 #[derive(Error, Debug, cmp::PartialEq, Clone, Copy)]
@@ -201,7 +201,7 @@ impl<
 {
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
-    pub fn new(prog: &'a BFProgram<P>, size: usize, can_grow: bool) -> Self {
+    pub fn new(prog: &'a BFProgram<P>, size: usize, is_auto_extending: bool) -> Self {
         let mut num_cells = 30000;
         if size != 0 {
             num_cells = size;
@@ -211,7 +211,7 @@ impl<
             prog,
             num_cells,
             tape,
-            can_grow,
+            is_auto_extending,
             data_pointer: 0,
             instruction_pointer: 0,
         }
@@ -233,10 +233,16 @@ impl<
     /// Move head right
     pub fn move_head_right(&mut self) -> Result<usize, VMError> {
         if self.data_pointer == self.num_cells - 1 {
-            return Err(VMError::InvalidHead {
-                error_description: "can't exceed rightmost position",
-                bad_instruction: self.prog.instructions[self.instruction_pointer],
-            });
+            if !self.is_auto_extending {
+                return Err(VMError::InvalidHead {
+                    error_description: "can't exceed rightmost position",
+                    bad_instruction: self.prog.instructions[self.instruction_pointer],
+                });
+            } else {
+                // extend the tape
+                self.num_cells += 1;
+                self.tape.push(T::from(0));
+            }
         }
         self.data_pointer += 1;
         Ok(self.instruction_pointer + 1)
@@ -459,6 +465,18 @@ mod tests {
             _ans = vm.move_head_left();
         }
         assert_eq!(vm.data_pointer, 5);
+    }
+
+    #[test]
+    fn move_pointer_tape_grows_ok() {
+        let p = BFProgram::new("TestFile", "<>.hello.".to_string());
+        let mut vm: VM<u8, &str> = VM::new(&p, 1, true);
+        assert_eq!(vm.data_pointer, 0);
+        // Create one extra cell
+        let _ans = vm.move_head_right();
+        // Check cell exists and is empty
+        assert_eq!(vm.num_cells, 2);
+        assert_eq!(vm.tape[1], 0);
     }
 
     #[test]
