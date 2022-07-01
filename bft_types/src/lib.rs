@@ -154,7 +154,7 @@ impl BFProgram {
     /// Check brackets balanced.
     ///
     /// This method would easily generalise to an arbitrary number of bracket types
-    pub fn check_brackets_balanced(&self) -> Result<(), BFError> {
+    fn check_brackets_balanced(&self) -> Result<(), BFError> {
         let mut stack: Vec<RawInstruction> = Vec::new();
         let mut line_last_open = 0;
         let mut col_last_open = 0;
@@ -193,7 +193,10 @@ impl BFProgram {
 
     // implicitly converted into a ref to a path
     /// Create a new BF program from a file and its contents
-    pub fn new<P: AsRef<Path>>(file_name: P, content: String) -> Self {
+    pub fn new<P: AsRef<Path>>(
+        file_name: P,
+        content: String,
+    ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut instructions = Vec::new();
         let mut line_count = 1;
         for line in content.lines() {
@@ -209,10 +212,12 @@ impl BFProgram {
             }
             line_count += 1;
         }
-        Self {
+        let prog = Self {
             file_name: file_name.as_ref().to_path_buf(),
             instructions,
-        }
+        };
+        prog.check_brackets_balanced()?;
+        Ok(prog)
     }
 
     /// Read from a file and create a new BF program from its content
@@ -228,8 +233,7 @@ impl BFProgram {
     ) -> Result<BFProgram, Box<dyn std::error::Error>> {
         let f = file_name.as_ref();
         let content = fs::read_to_string(f)?;
-        let prog = BFProgram::new(file_name, content);
-        prog.check_brackets_balanced()?;
+        let prog = BFProgram::new(file_name, content)?;
         Ok(prog)
     }
 }
@@ -243,7 +247,7 @@ mod tests {
 
     #[test]
     fn run_print_instruction() {
-        let prog = BFProgram::new("TestFile", "<>+-hello>\n,[chris].".to_string());
+        let prog = BFProgram::new("TestFile", "<>+-hello>\n,[chris].".to_string()).unwrap();
         // Test first instruction
         assert_eq!(prog.instructions[0].instruction, RawInstruction::PointerDec);
         // Test last instruction
@@ -260,7 +264,7 @@ mod tests {
 
     #[test]
     fn read_from_empty_file() {
-        let prog = BFProgram::new("EmptyFile", "".to_string());
+        let prog = BFProgram::new("EmptyFile", "".to_string()).unwrap();
         // Test first instruction
         assert_eq!(prog.instructions.len(), 0);
     }
@@ -269,29 +273,31 @@ mod tests {
     /// Too many open brackets
     fn bracket_error_open() {
         let prog = BFProgram::new("TestFile", "[[[]".to_string());
-        let result = prog.check_brackets_balanced();
-        assert_eq!(
-            result,
-            Err(BFError::BracketError {
-                bad_bracket: '[',
-                bad_col: 3,
-                bad_line: 1,
-            })
-        );
+        if let Err(e) = prog {
+            assert_eq!(
+                *e.downcast::<BFError>().unwrap(),
+                BFError::BracketError {
+                    bad_bracket: '[',
+                    bad_col: 3,
+                    bad_line: 1,
+                }
+            );
+        }
     }
 
     /// Too few open brackets
     #[test]
     fn bracket_error_closed() {
         let prog = BFProgram::new("TestFile", "[][]\n]".to_string());
-        let result = prog.check_brackets_balanced();
-        assert_eq!(
-            result,
-            Err(BFError::BracketError {
-                bad_bracket: ']',
-                bad_col: 1,
-                bad_line: 2,
-            })
-        );
+        if let Err(e) = prog {
+            assert_eq!(
+                *e.downcast::<BFError>().unwrap(),
+                BFError::BracketError {
+                    bad_bracket: ']',
+                    bad_col: 1,
+                    bad_line: 2,
+                }
+            );
+        }
     }
 }
