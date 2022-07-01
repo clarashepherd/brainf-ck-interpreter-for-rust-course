@@ -382,7 +382,7 @@ mod tests {
     #[test]
     /// Check for failure when pointer goes too far left
     fn pointer_left_fail() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let ans = vm.move_head_left();
@@ -398,7 +398,7 @@ mod tests {
     #[test]
     /// Check for failure when pointer goes too far
     fn pointer_right_fail() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
@@ -417,7 +417,7 @@ mod tests {
 
     #[test]
     fn pointer_right_left_ok() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
@@ -433,7 +433,7 @@ mod tests {
 
     #[test]
     fn move_pointer_tape_grows_ok() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 1, true);
         assert_eq!(vm.data_pointer, 0);
         // Create one extra cell
@@ -447,7 +447,7 @@ mod tests {
     /// Tape of u8 type.
     /// Increase value of cell to beyond u8's max size
     fn data_inc_dec_ok_wrap_high() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
@@ -471,7 +471,7 @@ mod tests {
     /// Tape of u8 type.
     /// Try setting value of cell to less than zero
     fn data_dec_wrap_low() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u8> = VM::new(&p, 5, false);
         assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
@@ -484,7 +484,7 @@ mod tests {
     /// Test read_byte from spoofed reader.
     /// Check works when VM's data type is *not u8.
     fn read_byte_ok() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_reader: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
@@ -499,7 +499,7 @@ mod tests {
     /// Test outputting data byte into spoofed writer.
     /// Check works when VM's data type is *not* u8.
     fn out_byte_ok() {
-        let p = BFProgram::new("TestFile", "<>.hello.".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "<>.hello.").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
         // non-shared bit
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
@@ -513,7 +513,7 @@ mod tests {
     #[test]
     /// Test unconditonal jump to "]"
     fn jump_forward_ok_fail() {
-        let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "ab.[<>cd]..").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
         // Spoof position of first "[".
         // Note: only valid instructions are counted, so the first "[" is at position 1, "]" at position 4.
@@ -535,7 +535,7 @@ mod tests {
     #[test]
     /// Test conditional jump to "]"
     fn jump_back_ok_fail() {
-        let p = BFProgram::new("TestFile", "ab.[<>cd]..".to_string()).unwrap();
+        let p = BFProgram::new("TestFile", "ab.[<>cd]..").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
         /////////////////////
         // Nonzero data bit, do jumps

@@ -84,7 +84,7 @@ pub enum BFError {
         bad_line,
         bad_col
     )]
-    /// Bad bracket error type
+    /// BError type for bracket matching
     BracketError {
         /// Bad bracket: "[" or "]"
         bad_bracket: char,
@@ -92,6 +92,12 @@ pub enum BFError {
         bad_line: usize,
         /// Col of bad bracket
         bad_col: usize,
+    },
+    /// IO errors from reading files
+    #[error("{}", error_message)]
+    IOError {
+        /// Message of std::io::Error
+        error_message: String,
     },
 }
 
@@ -193,10 +199,7 @@ impl BFProgram {
 
     // implicitly converted into a ref to a path
     /// Create a new BF program from a file and its contents
-    pub fn new<P: AsRef<Path>>(
-        file_name: P,
-        content: String,
-    ) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn new<P: AsRef<Path>>(file_name: P, content: &str) -> Result<Self, BFError> {
         let mut instructions = Vec::new();
         let mut line_count = 1;
         for line in content.lines() {
@@ -228,13 +231,20 @@ impl BFProgram {
     /// use bft_types::BFProgram;
     /// let prog = BFProgram::from_file("example_commands");
     /// ```
-    pub fn from_file<P: AsRef<Path>>(
-        file_name: P,
-    ) -> Result<BFProgram, Box<dyn std::error::Error>> {
+    pub fn from_file<P: AsRef<Path>>(file_name: P) -> Result<BFProgram, BFError> {
         let f = file_name.as_ref();
-        let content = fs::read_to_string(f)?;
-        let prog = BFProgram::new(file_name, content)?;
-        Ok(prog)
+        let content = fs::read_to_string(f);
+        match content {
+            Ok(inner) => {
+                let prog = BFProgram::new(file_name, &inner)?;
+                Ok(prog)
+            }
+            Err(e) => {
+                return Err(BFError::IOError {
+                    error_message: format!("{}", e),
+                })
+            }
+        }
     }
 }
 
@@ -247,7 +257,7 @@ mod tests {
 
     #[test]
     fn run_print_instruction() {
-        let prog = BFProgram::new("TestFile", "<>+-hello>\n,[chris].".to_string()).unwrap();
+        let prog = BFProgram::new("TestFile", "<>+-hello>\n,[chris].").unwrap();
         // Test first instruction
         assert_eq!(prog.instructions[0].instruction, RawInstruction::PointerDec);
         // Test last instruction
@@ -264,7 +274,7 @@ mod tests {
 
     #[test]
     fn read_from_empty_file() {
-        let prog = BFProgram::new("EmptyFile", "".to_string()).unwrap();
+        let prog = BFProgram::new("EmptyFile", "").unwrap();
         // Test first instruction
         assert_eq!(prog.instructions.len(), 0);
     }
@@ -272,10 +282,10 @@ mod tests {
     #[test]
     /// Too many open brackets
     fn bracket_error_open() {
-        let prog = BFProgram::new("TestFile", "[[[]".to_string());
+        let prog = BFProgram::new("TestFile", "[[[]");
         if let Err(e) = prog {
             assert_eq!(
-                *e.downcast::<BFError>().unwrap(),
+                e,
                 BFError::BracketError {
                     bad_bracket: '[',
                     bad_col: 3,
@@ -288,10 +298,10 @@ mod tests {
     /// Too few open brackets
     #[test]
     fn bracket_error_closed() {
-        let prog = BFProgram::new("TestFile", "[][]\n]".to_string());
+        let prog = BFProgram::new("TestFile", "[][]\n]");
         if let Err(e) = prog {
             assert_eq!(
-                *e.downcast::<BFError>().unwrap(),
+                e,
                 BFError::BracketError {
                     bad_bracket: ']',
                     bad_col: 1,
