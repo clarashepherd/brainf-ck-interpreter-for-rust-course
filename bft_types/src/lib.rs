@@ -110,10 +110,6 @@ pub struct InputInstruction {
 }
 
 impl InputInstruction {
-    /// Getter function for input instruction
-    pub fn instruction(&self) -> RawInstruction {
-        self.instruction
-    }
     /// Create a new input instruction
     pub fn new(instruction: RawInstruction, line_num: usize, col_num: usize) -> Self {
         Self {
@@ -121,6 +117,11 @@ impl InputInstruction {
             line_num,
             col_num,
         }
+    }
+
+    /// Getter function for input instruction
+    pub fn instruction(&self) -> RawInstruction {
+        self.instruction
     }
 }
 
@@ -147,6 +148,56 @@ pub struct BFProgram {
 }
 
 impl BFProgram {
+    // implicitly converted into a ref to a path
+    /// Create a new BF program from a file and its contents
+    pub fn new<P: AsRef<Path>>(file_name: P, content: &str) -> Result<Self, BFError> {
+        let mut instructions = Vec::new();
+        let mut line_count = 1;
+        for line in content.lines() {
+            let mut col_count = 1;
+            for c in line.chars() {
+                let instruction = RawInstruction::from_char(c);
+                if let Some(i) = instruction {
+                    // Nice alternative to "match" if only want to do
+                    // something in affirmative case
+                    instructions.push(InputInstruction::new(i, line_count, col_count));
+                }
+                col_count += 1;
+            }
+            line_count += 1;
+        }
+        let prog = Self {
+            file_name: file_name.as_ref().to_path_buf(),
+            instructions,
+        };
+        prog.check_brackets_balanced()?;
+        Ok(prog)
+    }
+
+    // Read from a file and create a new BF program from its content
+    /// # Examples
+    // Some code (run as user, need to include crates):
+    /// ```
+    ///
+    /// use bft_types::BFProgram;
+    /// let prog = BFProgram::from_file("example_commands");
+    /// ```
+    pub fn from_file<P: AsRef<Path>>(file_name: P) -> Result<BFProgram, BFError> {
+        let f = file_name.as_ref();
+        let content = fs::read_to_string(f);
+        match content {
+            Ok(inner) => {
+                let prog = BFProgram::new(file_name, &inner)?;
+                Ok(prog)
+            }
+            Err(e) => {
+                return Err(BFError::IOError {
+                    error_message: format!("{}", e),
+                })
+            }
+        }
+    }
+
     /// Getter for file name, only to shut clippy up
     /// TODO what can I change to not need this?
     pub fn file_name(&self) -> &PathBuf {
@@ -195,56 +246,6 @@ impl BFProgram {
             });
         }
         Ok(())
-    }
-
-    // implicitly converted into a ref to a path
-    /// Create a new BF program from a file and its contents
-    pub fn new<P: AsRef<Path>>(file_name: P, content: &str) -> Result<Self, BFError> {
-        let mut instructions = Vec::new();
-        let mut line_count = 1;
-        for line in content.lines() {
-            let mut col_count = 1;
-            for c in line.chars() {
-                let instruction = RawInstruction::from_char(c);
-                if let Some(i) = instruction {
-                    // Nice alternative to "match" if only want to do
-                    // something in affirmative case
-                    instructions.push(InputInstruction::new(i, line_count, col_count));
-                }
-                col_count += 1;
-            }
-            line_count += 1;
-        }
-        let prog = Self {
-            file_name: file_name.as_ref().to_path_buf(),
-            instructions,
-        };
-        prog.check_brackets_balanced()?;
-        Ok(prog)
-    }
-
-    /// Read from a file and create a new BF program from its content
-    /// # Examples
-    // Some code (run as user, need to include crates):
-    /// ```
-    ///
-    /// use bft_types::BFProgram;
-    /// let prog = BFProgram::from_file("example_commands");
-    /// ```
-    pub fn from_file<P: AsRef<Path>>(file_name: P) -> Result<BFProgram, BFError> {
-        let f = file_name.as_ref();
-        let content = fs::read_to_string(f);
-        match content {
-            Ok(inner) => {
-                let prog = BFProgram::new(file_name, &inner)?;
-                Ok(prog)
-            }
-            Err(e) => {
-                return Err(BFError::IOError {
-                    error_message: format!("{}", e),
-                })
-            }
-        }
     }
 }
 
