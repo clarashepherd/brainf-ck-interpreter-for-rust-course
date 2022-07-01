@@ -12,8 +12,11 @@ use std::io::{self, stdin, stdout, Read, Write};
 use std::path::Path;
 use thiserror::Error;
 
+/// TODO doc
 pub struct ContainsWriter<W: Write> {
+    /// TODO doc or make private
     pub writer: W,
+    /// TODO doc or make private
     pub last_character_newline: bool,
 }
 
@@ -149,13 +152,23 @@ where
     T: num_traits::WrappingAdd + num_traits::WrappingSub + From<u8>,
 {
     fn inc_value(&self) -> Self {
-        self.wrapping_add(&T::from(1 as u8))
+        self.wrapping_add(&T::from(1))
     }
     fn sub_value(&self) -> Self {
-        self.wrapping_sub(&T::from(1 as u8))
+        self.wrapping_sub(&T::from(1))
     }
 }
-
+/////////////
+// TODO
+// Daniel: Is there a good reason this function isn't part of CellKind, rather than
+// being an independent trait?
+//
+// Chris: I think so? I want the above impl to work for u8, u16, i16, ...
+// To add the first_byte function, the generic T needs to implement to_be_bytes(&self) -> u8(*some_dynamic_size*).
+// The problem is, the size of to_be_bytes output depends on the type, and AFAIK rust
+// can't determine this dynamically.
+// Any pointers here?
+///////////
 /// Trait for "can get the first byte"
 pub trait FirstByte {
     /// Returns first byte of some multi-byte number type
@@ -186,34 +199,6 @@ impl<
         P: AsRef<Path>,
     > VM<'a, T, P>
 {
-    /// Get program
-    pub fn prog(&'a self) -> &BFProgram<P> {
-        self.prog
-    }
-    /// Get number of cells
-    pub fn num_cells(&self) -> usize {
-        self.num_cells
-    }
-    /// Get tape
-    pub fn tape(&self) -> &Vec<T> {
-        &self.tape
-    }
-    /// Get cangrow
-    pub fn can_grow(&self) -> bool {
-        self.can_grow
-    }
-    /// Get head pos
-    pub fn data_pointer(&self) -> usize {
-        self.data_pointer
-    }
-    /// Get instruction head
-    pub fn instruction_pointer(&self) -> usize {
-        self.instruction_pointer
-    }
-    /// Get value at data head
-    fn head_value(&mut self) -> T {
-        self.tape[self.data_pointer].clone()
-    }
     /// Create new VM with some size, can choose whether to grow.
     /// If given size is zero, tape is 30,000 bytes long.
     pub fn new(prog: &'a BFProgram<P>, size: usize, can_grow: bool) -> Self {
@@ -257,13 +242,13 @@ impl<
         Ok(self.instruction_pointer + 1)
     }
     /// Increment value at a particular position, returning an error if value is too high
-    fn increment_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn increment_value(&mut self, _i: &InputInstruction) -> Result<usize, VMError> {
         // Kind of bad naming here
         self.tape[self.data_pointer] = self.tape[self.data_pointer].inc_value();
         Ok(self.instruction_pointer + 1)
     }
     /// Decrement value at particular position, returning an error if less than zero
-    fn decrement_value(&mut self, i: &InputInstruction) -> Result<usize, VMError> {
+    fn decrement_value(&mut self, _i: &InputInstruction) -> Result<usize, VMError> {
         self.tape[self.data_pointer] = self.tape[self.data_pointer].sub_value();
         Ok(self.instruction_pointer + 1)
     }
@@ -347,7 +332,7 @@ impl<
                 }),
             }
         } else {
-            Ok(self.instruction_pointer() + 1)
+            Ok(self.instruction_pointer + 1)
         }
     }
     /// Interpret the instructions at some given path.
@@ -400,9 +385,29 @@ mod tests {
     //use crate::FirstByte;
     use crate::ContainsWriter;
     use crate::VM;
+    use crate::{CellKind, FirstByte};
     use assert_fs::prelude::*;
     use core::str;
     use std::io::{Cursor, Write};
+
+    // Useful function
+    impl<
+            'a,
+            T: num_traits::Num
+                + num_traits::Zero
+                + std::clone::Clone
+                + CellKind
+                + std::default::Default
+                + std::convert::From<u8>
+                + FirstByte,
+            P: AsRef<std::path::Path>,
+        > VM<'a, T, P>
+    {
+        /// Get value at data head
+        fn head_value(&mut self) -> T {
+            self.tape[self.data_pointer].clone()
+        }
+    }
 
     #[test]
     /// Check for failure when pointer goes too far left
@@ -429,7 +434,7 @@ mod tests {
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
         assert_eq!(vm.data_pointer, 0);
         let mut _ans;
-        for _n in 0..vm.num_cells() - 1 {
+        for _n in 0..vm.num_cells - 1 {
             _ans = vm.move_head_right(i);
         }
         let ans = vm.move_head_right(i);
@@ -466,7 +471,7 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 0, false);
-        assert_eq!(vm.data_pointer(), 0);
+        assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Increase to max size
         for _n in 0..255 {
@@ -491,7 +496,7 @@ mod tests {
         let p = BFProgram::new("TestFile", "<>.hello.".to_string());
         let i = &InputInstruction::new(RawInstruction::PointerDec, 2, 3);
         let mut vm: VM<u8, &str> = VM::new(&p, 5, false);
-        assert_eq!(vm.data_pointer(), 0);
+        assert_eq!(vm.data_pointer, 0);
         assert_eq!(vm.tape[vm.data_pointer], 0);
         // Try to decrease below zero
         let ans = vm.decrement_value(i);
@@ -511,7 +516,7 @@ mod tests {
         // Reader should be unchanged
         assert_eq!(spoofed_reader.into_inner(), vec![11, 12, 13]);
         // Tape's first bit should be changed
-        assert_eq!(*vm.tape(), vec![11, 0, 0, 0, 0]);
+        assert_eq!(*vm.tape, vec![11, 0, 0, 0, 0]);
     }
 
     #[test]
@@ -525,7 +530,7 @@ mod tests {
         let mut spoofed_writer: Cursor<Vec<u8>> = Cursor::new(vec![11, 12, 13]);
         vm.out_byte(i, &mut spoofed_writer).unwrap();
         // Tape's first bit should be unchanged
-        assert_eq!(*vm.tape(), vec![0, 0, 0, 0, 0]);
+        assert_eq!(*vm.tape, vec![0, 0, 0, 0, 0]);
         // Writer's first bit should have changed
         assert_eq!(spoofed_writer.into_inner(), vec![0, 12, 13]);
     }
