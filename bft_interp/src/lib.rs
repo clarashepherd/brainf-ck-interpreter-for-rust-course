@@ -10,11 +10,11 @@ use std::convert;
 use std::io::{self, Read, Write};
 use thiserror::Error;
 
-/// TODO doc
+/// Wraps around writer, writing newline if buffer does not terminate with one.
 pub struct ContainsWriter<W: Write> {
-    /// TODO doc or make private
+    /// Writer being wrapped.
     pub writer: W,
-    /// TODO doc or make private
+    /// Whether or not the buffer being written out ends with a newline.
     pub last_character_newline: bool,
 }
 
