@@ -271,57 +271,39 @@ where
                 bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
         };
+        writer.flush();
         Ok(self.instruction_pointer + 1)
     }
     /// Unconditionally jump program counter forward to matching "]" instruction.
     fn jump_forward(&mut self) -> Result<usize, VMError> {
-        // Search beyond current instruction pointer for next instruction corresponding to "]".
-        let pos_next_jump_back = &self
+        //println!("jump forward");
+        if self
             .prog
-            .instructions()
-            .iter()
-            .skip(self.instruction_pointer + 1)
-            .position(|x| x.instruction() == RawInstruction::JumpBack);
-        // Don't expect any errors here: should have caught in bracket matching.
-        // Counting from position of instruction pointer
-        match pos_next_jump_back {
-            Some(pos) => Ok(pos + self.instruction_pointer + 1),
-            None => Err(VMError::CantFindBracket {
+            .pos_bracket_matches
+            .contains_key(&self.instruction_pointer)
+        {
+            Ok(self.prog.pos_bracket_matches[&self.instruction_pointer])
+        } else {
+            Err(VMError::CantFindBracket {
                 error_description: "Can't find matching ']' bracket",
                 bad_instruction: self.prog.instructions[self.instruction_pointer],
-            }),
+            })
         }
     }
-    /// Conditionally jump program counter forward to matching "[" instruction.
+    /// Conditionally jump program counter back to matching "[" instruction.
     /// Condition: byte at data pointer *not* zero.
     fn jump_back(&mut self) -> Result<usize, VMError> {
+        //println!("jump back");
         // Search beyond current instruction pointer for next instruction corresponding to "[".
         if !self.tape[self.data_pointer].is_zero() {
-            let num_instructions = self.prog.instructions().len();
-            let skip_from_rhs = num_instructions - self.instruction_pointer;
-            //println!("JUMP BACK: skip_from_rhs = {}", skip_from_rhs);
-            let pos_next_jump_forward = self
-                .prog
-                .instructions()
-                .iter()
-                .rev()
-                .skip(skip_from_rhs)
-                .position(|x| x.instruction() == RawInstruction::JumpForward);
-            // Don't expect any errors here: should have caught in bracket matching.
-            match pos_next_jump_forward {
-                Some(pos) => {
-                    //println!("Number of extra RHS iterations: {}", pos);
-                    // Position of matching "[" *plus one*
-                    Ok(self.instruction_pointer - pos)
+            // Jump back
+            for (k, v) in self.prog.pos_bracket_matches.iter() {
+                if *v == self.instruction_pointer {
+                    return Ok(*k + 1);
                 }
-                None => Err(VMError::CantFindBracket {
-                    error_description: "Can't find matching '[' bracket",
-                    bad_instruction: self.prog.instructions[self.instruction_pointer],
-                }),
             }
-        } else {
-            Ok(self.instruction_pointer + 1)
         }
+        Ok(self.instruction_pointer + 1)
     }
     /// Interpret the instructions at some given path.
     /// Currently just prints their content.
@@ -512,7 +494,7 @@ mod tests {
 
     #[test]
     /// Test unconditonal jump to "]"
-    fn jump_forward_ok_fail() {
+    fn jump_forward_ok() {
         let p = BFProgram::new("TestFile", "ab.[<>cd]..").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
         // Spoof position of first "[".
@@ -521,47 +503,29 @@ mod tests {
         vm.instruction_pointer = 1;
         let mut ans = vm.jump_forward();
         assert_eq!(ans, Ok(4));
-        // Return an error when can't find matching bracket.
-        vm.instruction_pointer = 4;
-        ans = vm.jump_forward();
-        assert_eq!(
-            ans,
-            Err(VMError::CantFindBracket {
-                error_description: "Can't find matching ']' bracket",
-                bad_instruction: vm.prog.instructions[vm.instruction_pointer]
-            })
-        );
     }
     #[test]
     /// Test conditional jump to "]"
-    fn jump_back_ok_fail() {
-        let p = BFProgram::new("TestFile", "ab.[<>cd]..").unwrap();
+    fn jump_back_ok() {
+        let p = BFProgram::new("TestFile", "[[ab.]<>cd]..").unwrap();
         let mut vm: VM<u16> = VM::new(&p, 5, false);
+        let pos_close = 3;
         /////////////////////
         // Nonzero data bit, do jumps
         //
         // Spoof position of first "]".
         // Correctly find "[" position"]
         vm.tape[vm.data_pointer] = 100;
-        vm.instruction_pointer = 4;
+        vm.instruction_pointer = pos_close;
         let mut ans = vm.jump_back();
         assert_eq!(ans, Ok(2));
         // Return an error when can't find matching bracket
-        vm.instruction_pointer = 1;
-        ans = vm.jump_back();
-        assert_eq!(
-            ans,
-            Err(VMError::CantFindBracket {
-                error_description: "Can't find matching '[' bracket",
-                bad_instruction: vm.prog.instructions[vm.instruction_pointer]
-            })
-        );
         ////////////////////
         // Zero data bit, don't jump
         vm.tape[vm.data_pointer] = 0;
-        vm.instruction_pointer = 4;
+        vm.instruction_pointer = pos_close;
         ans = vm.jump_back();
-        assert_eq!(ans, Ok(5));
+        assert_eq!(ans, Ok(pos_close + 1));
     }
 
     #[test]

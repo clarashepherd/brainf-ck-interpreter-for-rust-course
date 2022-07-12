@@ -9,6 +9,8 @@
 //   * avoid 'use' entire trait name?
 #![warn(missing_docs)]
 
+use std::collections::HashMap;
+use std::hash::Hash;
 use std::path::{Path, PathBuf};
 use std::{fmt, fs};
 use thiserror::Error;
@@ -145,6 +147,8 @@ pub struct BFProgram {
     file_name: PathBuf,
     /// Program's instructions.
     pub instructions: Vec<InputInstruction>,
+    /// Position among instructions of matching loop start/end
+    pub pos_bracket_matches: HashMap<usize, usize>,
 }
 
 impl BFProgram {
@@ -166,11 +170,13 @@ impl BFProgram {
             }
             line_count += 1;
         }
-        let prog = Self {
+        let mut prog = Self {
             file_name: file_name.as_ref().to_path_buf(),
             instructions,
+            pos_bracket_matches: HashMap::new(),
         };
-        let _pos_matches = prog.check_brackets_balanced()?;
+        let pos_matches = prog.check_brackets_balanced()?;
+        prog.pos_bracket_matches = pos_matches;
         Ok(prog)
     }
 
@@ -211,15 +217,14 @@ impl BFProgram {
     /// Check brackets balanced.
     ///
     /// This method would easily generalise to an arbitrary number of bracket types
-    fn check_brackets_balanced(&self) -> Result<Vec<[usize; 2]>, BFError> {
+    fn check_brackets_balanced(&self) -> Result<HashMap<usize, usize>, BFError> {
         // Stack containing unmatched brackets
         let mut stack: Vec<usize> = Vec::new();
         // Positions of matching brackets
-        let mut pos_matches: Vec<[usize; 2]> = Vec::new();
+        let mut pos_matches: HashMap<usize, usize> = HashMap::new();
         // Position in instruction file, for erro rmessage
         let mut line_last_open = 0;
         let mut col_last_open = 0;
-        let mut num_pops = 0;
         for (pos, i) in self.instructions.iter().enumerate() {
             let raw = i.instruction;
             match raw {
@@ -233,7 +238,7 @@ impl BFProgram {
                 RawInstruction::JumpBack => {
                     // Save positions
                     if let Some(p) = stack.last() {
-                        pos_matches.push([*p, pos]);
+                        pos_matches.insert(*p, pos);
                     }
                     // Attempt to pop back
                     // if fail, return an error
@@ -264,6 +269,7 @@ mod tests {
     //use crate::BFError;
     use crate::BFProgram;
     use crate::RawInstruction;
+    use std::collections::HashMap;
 
     #[test]
     fn run_print_instruction() {
@@ -331,7 +337,10 @@ mod tests {
         let prog = BFProgram::new("TestFile", "[[]][]");
         if let Ok(p) = prog {
             let pos_matches = p.check_brackets_balanced().unwrap();
-            let expected_ans: Vec<[usize; 2]> = vec![[1, 2], [0, 3], [4, 5]];
+            let mut expected_ans: HashMap<usize, usize> = HashMap::new();
+            expected_ans.insert(1, 2);
+            expected_ans.insert(0, 3);
+            expected_ans.insert(4, 5);
             assert_eq!(pos_matches, expected_ans);
         } else {
             panic!("Should report brackets as matched");

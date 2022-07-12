@@ -40,7 +40,7 @@ fn hello_world_auto_expand() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-// TODO auto-expand off, check for failure
+// Auto-expand off, check for failure
 #[test]
 /// Create VM with 1 cell, read in 'hello world' w/o auto expand.
 /// Expect failure due to tape being too small.
