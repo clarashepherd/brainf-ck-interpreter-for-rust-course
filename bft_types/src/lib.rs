@@ -170,7 +170,7 @@ impl BFProgram {
             file_name: file_name.as_ref().to_path_buf(),
             instructions,
         };
-        prog.check_brackets_balanced()?;
+        let _pos_matches = prog.check_brackets_balanced()?;
         Ok(prog)
     }
 
@@ -211,22 +211,31 @@ impl BFProgram {
     /// Check brackets balanced.
     ///
     /// This method would easily generalise to an arbitrary number of bracket types
-    fn check_brackets_balanced(&self) -> Result<(), BFError> {
-        let mut stack: Vec<RawInstruction> = Vec::new();
+    fn check_brackets_balanced(&self) -> Result<Vec<[usize; 2]>, BFError> {
+        // Stack containing unmatched brackets
+        let mut stack: Vec<usize> = Vec::new();
+        // Positions of matching brackets
+        let mut pos_matches: Vec<[usize; 2]> = Vec::new();
+        // Position in instruction file, for erro rmessage
         let mut line_last_open = 0;
         let mut col_last_open = 0;
-        for i in &self.instructions {
+        let mut num_pops = 0;
+        for (pos, i) in self.instructions.iter().enumerate() {
             let raw = i.instruction;
             match raw {
                 RawInstruction::JumpForward => {
-                    // push raw instruction to vector
+                    // Push raw instruction to vector
                     // Save last line and col of stack's top
-                    stack.push(raw);
+                    stack.push(pos);
                     line_last_open = i.line_num;
                     col_last_open = i.col_num;
                 }
                 RawInstruction::JumpBack => {
-                    // attempt to pop back
+                    // Save positions
+                    if let Some(p) = stack.last() {
+                        pos_matches.push([*p, pos]);
+                    }
+                    // Attempt to pop back
                     // if fail, return an error
                     stack.pop().ok_or(BFError::BracketError {
                         bad_bracket: ']',
@@ -245,7 +254,7 @@ impl BFProgram {
                 bad_col: col_last_open,
             });
         }
-        Ok(())
+        Ok(pos_matches)
     }
 }
 
@@ -293,6 +302,8 @@ mod tests {
                     bad_line: 1,
                 }
             );
+        } else {
+            panic!("Should return an error");
         }
     }
 
@@ -309,6 +320,21 @@ mod tests {
                     bad_line: 2,
                 }
             );
+        } else {
+            panic!("Should return an error");
+        }
+    }
+
+    /// Brackets matched, check correct location
+    #[test]
+    fn bracket_match_ok() {
+        let prog = BFProgram::new("TestFile", "[[]][]");
+        if let Ok(p) = prog {
+            let pos_matches = p.check_brackets_balanced().unwrap();
+            let expected_ans: Vec<[usize; 2]> = vec![[1, 2], [0, 3], [4, 5]];
+            assert_eq!(pos_matches, expected_ans);
+        } else {
+            panic!("Should report brackets as matched");
         }
     }
 }
