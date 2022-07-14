@@ -271,7 +271,7 @@ where
                 bad_instruction: self.prog.instructions[self.instruction_pointer],
             });
         };
-        writer.flush();
+        writer.flush().ok();
         Ok(self.instruction_pointer + 1)
     }
     /// Unconditionally jump program counter forward to matching "]" instruction.
@@ -314,17 +314,16 @@ where
     {
         while self.instruction_pointer < self.prog.instructions.len() {
             let i = self.prog.instructions[self.instruction_pointer];
-            let ans: Result<usize, VMError>;
-            match i.instruction() {
-                RawInstruction::PointerInc => ans = self.move_head_right(),
-                RawInstruction::PointerDec => ans = self.move_head_left(),
-                RawInstruction::ByteInc => ans = self.increment_value(),
-                RawInstruction::ByteDec => ans = self.decrement_value(),
-                RawInstruction::ReadByte => ans = self.read_byte(input),
-                RawInstruction::OutByte => ans = self.out_byte(output),
-                RawInstruction::JumpForward => ans = self.jump_forward(),
-                RawInstruction::JumpBack => ans = self.jump_back(),
-            }
+            let ans = match i.instruction() {
+                RawInstruction::PointerInc => self.move_head_right(),
+                RawInstruction::PointerDec => self.move_head_left(),
+                RawInstruction::ByteInc => self.increment_value(),
+                RawInstruction::ByteDec => self.decrement_value(),
+                RawInstruction::ReadByte => self.read_byte(input),
+                RawInstruction::OutByte => self.out_byte(output),
+                RawInstruction::JumpForward => self.jump_forward(),
+                RawInstruction::JumpBack => self.jump_back(),
+            };
             self.instruction_pointer = ans?;
         }
         Ok(())
@@ -501,7 +500,7 @@ mod tests {
         // Note: only valid instructions are counted, so the first "[" is at position 1, "]" at position 4.
         // Correctly find "]" position.
         vm.instruction_pointer = 1;
-        let mut ans = vm.jump_forward();
+        let ans = vm.jump_forward();
         assert_eq!(ans, Ok(4));
     }
     #[test]

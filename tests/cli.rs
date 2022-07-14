@@ -35,7 +35,6 @@ fn hello_world_auto_expand() -> Result<(), Box<dyn std::error::Error>> {
     cmd.arg("-n");
     cmd.arg("1");
     cmd.arg("-e");
-    cmd.arg("y");
     cmd.assert().success().stdout("Hello, World!\n");
     Ok(())
 }
@@ -56,8 +55,6 @@ fn hello_world_size_fail() -> Result<(), Box<dyn std::error::Error>> {
     cmd.arg(temp_file.path());
     cmd.arg("-n");
     cmd.arg("1");
-    cmd.arg("-e");
-    cmd.arg("n");
     cmd.assert().failure().stderr(format!("Error in file \"{}\": Invalid head position: can\'t exceed rightmost position, bad instruction: [1:1] Increment data pointer\n", temp_file.path().display()));
     Ok(())
 }

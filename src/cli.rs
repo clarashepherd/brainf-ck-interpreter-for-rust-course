@@ -12,6 +12,6 @@ pub struct Args {
     // Size of tape
     #[clap(short, long, default_value = "0")]
     pub num_cells: String,
-    #[clap(short, long, default_value = "n")]
-    pub extend_auto: String,
+    #[clap(short, long)]
+    pub extend_auto: bool,
 }
